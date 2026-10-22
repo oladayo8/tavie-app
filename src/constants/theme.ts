@@ -1,58 +1,34 @@
-/**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://unistyl.es/), etc.
- */
-
-import '@/global.css';
-
 import { Platform } from 'react-native';
 
+/**
+ * Tavie brand palette (Build Brief, section 5).
+ * The UI is black and white (Ink and Paper). Green is only for action buttons
+ * and progress or success states.
+ */
 export const Colors = {
-  light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-  },
-  dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-  },
+  ink: '#15211C',
+  paper: '#EEF1EC',
+  emerald: '#0B7A50',
+  forest: '#0A3D2B',
+  mint: '#5FD8A0',
+
+  // Neutrals derived from Ink and Paper.
+  white: '#FFFFFF',
+  inkMuted: '#4E5A54',
+  line: '#D3D9D1',
+  error: '#B42318',
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
-
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
-  },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
-  },
-  web: {
-    sans: 'var(--font-display)',
-    serif: 'var(--font-serif)',
-    rounded: 'var(--font-rounded)',
-    mono: 'var(--font-mono)',
-  },
-});
+/** Font family names, as registered by `useFonts` in the root layout. */
+export const Fonts = {
+  display: 'BricolageGrotesque_800ExtraBold',
+  body: 'InstrumentSans_400Regular',
+  bodyMedium: 'InstrumentSans_500Medium',
+  bodySemiBold: 'InstrumentSans_600SemiBold',
+  mono: 'JetBrainsMono_500Medium',
+} as const;
 
 export const Spacing = {
-  half: 2,
   one: 4,
   two: 8,
   three: 16,
@@ -61,5 +37,14 @@ export const Spacing = {
   six: 64,
 } as const;
 
-export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
-export const MaxContentWidth = 800;
+/** Minimum tap target (Build Brief, section 10: 44px or more). */
+export const MinTapTarget = 52;
+
+export const Radius = {
+  card: 16,
+  button: 14,
+} as const;
+
+export const MaxContentWidth = 480;
+
+export const isWeb = Platform.OS === 'web';
