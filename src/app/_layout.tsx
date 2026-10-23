@@ -57,6 +57,7 @@ function RootStack() {
         <Stack.Screen name="creator/index" />
         <Stack.Screen name="creator/new" />
         <Stack.Screen name="creator/programs/[id]/index" />
+        <Stack.Screen name="creator/programs/[id]/generate" />
         <Stack.Screen name="creator/programs/[id]/milestones/index" />
         <Stack.Screen name="creator/programs/[id]/milestones/[mid]" />
         <Stack.Screen name="creator/programs/[id]/tasks/[tid]" />

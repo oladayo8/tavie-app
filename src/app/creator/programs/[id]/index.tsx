@@ -81,6 +81,7 @@ export default function ProgramOverviewScreen() {
 
   const go = (
     pathname:
+      | '/creator/programs/[id]/generate'
       | '/creator/programs/[id]/milestones'
       | '/creator/programs/[id]/agent'
       | '/creator/programs/[id]/preview'
@@ -149,6 +150,9 @@ export default function ProgramOverviewScreen() {
             );
           })}
           <Button variant="secondary" title="Edit milestones" onPress={() => go('/creator/programs/[id]/milestones')} />
+          {!isLive ? (
+            <Button variant="secondary" title="Plan with Tavie" onPress={() => go('/creator/programs/[id]/generate')} />
+          ) : null}
         </View>
 
         <View style={styles.section}>

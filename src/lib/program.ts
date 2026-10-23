@@ -3,6 +3,8 @@
  * (supabase/migrations); these give the creator a plain message before a save is refused.
  */
 
+import type { SuggestedTask } from '@/lib/plan-rules';
+
 export type CompletionType = 'done' | 'count' | 'yes_no' | 'text';
 export type ProgramStatus = 'draft' | 'live' | 'paused';
 export type ResourceType = 'youtube' | 'link' | 'file';
@@ -136,6 +138,24 @@ export function draftFromTask(task: Task | null, resourceIds: string[] = []): Ta
     est_minutes: String(task?.est_minutes ?? 30),
     is_optional: task?.is_optional ?? false,
     resource_ids: resourceIds,
+  };
+}
+
+/** Fills the task editor from a suggestion. Resources the creator already picked stay. */
+export function draftFromSuggestion(task: SuggestedTask, current: TaskDraft): TaskDraft {
+  return {
+    ...current,
+    title: task.title,
+    why: task.why ?? '',
+    completion_type: task.completion_type,
+    check_in_question: task.check_in_question ?? '',
+    target_count: task.target_count ? String(task.target_count) : '',
+    unit: task.unit ?? '',
+    follow_up: !task.follow_up_question ? 'none' : task.follow_up_options ? 'choices' : 'text',
+    follow_up_question: task.follow_up_question ?? '',
+    follow_up_options: task.follow_up_options ?? [],
+    est_minutes: String(task.est_minutes),
+    is_optional: task.is_optional,
   };
 }
 

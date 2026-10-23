@@ -57,7 +57,8 @@ Supabase's built-in email sender is rate limited (a few emails per hour). Add cu
 | `/creator/new` | New program: goal, then length |
 | `/creator/programs/[id]` | Program overview: goal, length, path, what publishing still needs, Publish |
 | `/creator/programs/[id]/milestones` and `/milestones/[mid]` | Add, rename, reorder, and remove milestones and their tasks |
-| `/creator/programs/[id]/tasks/[tid]` | Task editor (`new` for a new task): action, why, report type, resources, minutes |
+| `/creator/programs/[id]/generate` | Plan with Tavie: paste an existing course (optional), review and edit the suggested plan, then add it |
+| `/creator/programs/[id]/tasks/[tid]` | Task editor (`new` for a new task): one-sentence Suggest, action, why, report type, resources; follow-up, minutes and skipping under "Edit details" |
 | `/creator/programs/[id]/agent`, `/preview`, `/share` | Agent name, student preview (saves nothing), join link with Copy |
 | `/student` | Student home (Today card arrives in Milestone 3) |
 | `/no-access` | Signed in with no role and no link: "Ask your coach for your Tavie link" |
@@ -71,6 +72,22 @@ and a student if they have a `students` row. User metadata is never used for rol
 `supabase/migrations/` holds every database change. Each table has row-level security; logged-out users can
 only call `get_join_info`; creators see only their own programs; registering, creating, and publishing programs go through server
 functions that check the caller. See the migration file's comments for the full list.
+
+## AI plan generator
+
+`supabase/functions/generate` is a Supabase Edge Function that asks Claude for a suggested plan (from a goal,
+length, and the creator's own course) or a suggested task (from one sentence). It saves nothing: the app shows the
+suggestion for the creator to edit, and saves only when they approve (`import_plan`, or the task editor's Save).
+Programs still go live only when the creator publishes, and progression stays deterministic.
+
+- Secrets (Supabase → Edge Functions → Secrets): `ANTHROPIC_API_KEY`, and optionally `TAVIE_AI_MODEL`
+  (default `claude-haiku-5-5`). The key never goes in the app.
+- Limits, enforced in the database by `start_ai_request`: 5 plans and 30 task suggestions per creator per day,
+  one request at a time, course text up to 15,000 characters, plans up to 10 milestones of 5 tasks. Requests that
+  never reached Claude don't count.
+- Deploy: `npx supabase functions deploy generate --project-ref <ref> --no-verify-jwt` (the function checks the
+  caller itself, through `start_ai_request`).
+- Live check on a test project: `node tests/api/ai-plan.live.mjs` (calls Claude; same variables as `test:api`).
 
 ## Scripts
 

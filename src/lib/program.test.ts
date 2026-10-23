@@ -3,6 +3,7 @@ import { describe, expect, it } from '@jest/globals';
 import {
   classifyLink,
   defaultQuestion,
+  draftFromSuggestion,
   draftFromTask,
   goalIsValid,
   moveId,
@@ -193,5 +194,43 @@ describe('helpers', () => {
     expect(parseWeeks('8')).toBe(8);
     expect(parseWeeks('0')).toBeNull();
     expect(parseWeeks('53')).toBeNull();
+  });
+});
+
+describe('draftFromSuggestion', () => {
+  const suggestion = {
+    title: 'Call 50 sellers',
+    why: 'Deals come from conversations.',
+    completion_type: 'count' as const,
+    check_in_question: 'How many calls did you make?',
+    target_count: 50,
+    unit: 'calls',
+    follow_up_question: 'What got in the way?',
+    follow_up_options: ['Nothing', 'No answers'],
+    est_minutes: 90,
+    is_optional: false,
+  };
+
+  it('fills every field the creator would type, and keeps chosen resources', () => {
+    const draft = draftFromSuggestion(suggestion, { ...draftFromTask(null), resource_ids: ['r1'] });
+    expect(draft).toMatchObject({
+      title: 'Call 50 sellers',
+      completion_type: 'count',
+      target_count: '50',
+      unit: 'calls',
+      follow_up: 'choices',
+      follow_up_options: ['Nothing', 'No answers'],
+      est_minutes: '90',
+      resource_ids: ['r1'],
+    });
+    expect(validateTaskDraft(draft)).toEqual([]);
+  });
+
+  it('maps a written follow-up and no follow-up', () => {
+    expect(draftFromSuggestion({ ...suggestion, follow_up_options: null }, draftFromTask(null)).follow_up).toBe('text');
+    expect(
+      draftFromSuggestion({ ...suggestion, follow_up_question: null, follow_up_options: null }, draftFromTask(null))
+        .follow_up,
+    ).toBe('none');
   });
 });
