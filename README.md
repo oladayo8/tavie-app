@@ -22,12 +22,15 @@ Expo SDK 58 · Expo Router · TypeScript · Supabase (auth, Postgres with row-le
 3. Set up Supabase (one time):
    - Create a project at https://supabase.com.
    - **Authentication > Sign In / Providers > Email**: make sure Email is enabled.
-   - **Authentication > Email Templates > Magic Link**: replace the body so it sends the code, for example:
+   - **Authentication > Sign In / Providers > Email**: set **Email OTP Length** to `6`.
+   - **Authentication > Email Templates**: in both **Magic Link** and **Confirm signup**, replace the body
+     so it sends the code (new emails get Confirm signup, returning ones Magic Link), for example:
      ```html
      <h2>Your Tavie code</h2>
      <p>Enter this code in the app: <strong>{{ .Token }}</strong></p>
      ```
-     Without `{{ .Token }}` Supabase emails a link instead of a code.
+     Leave out `{{ .ConfirmationURL }}`: Tavie signs in with the code only. Supabase only lets you edit
+     templates once custom SMTP is set up (**Authentication > Emails > SMTP Settings**).
    - **SQL Editor > New query**: paste the whole of each file in `supabase/migrations/`, oldest first,
      and click **Run**. This creates the tables, security rules, and the private file bucket.
    - Copy `.env.example` to `.env` and fill in the Project URL and the anon (publishable) key from
