@@ -624,3 +624,92 @@ describe('file storage', () => {
     assert.equal((await as(A, "delete from storage.objects where bucket_id = 'program-files'")).rowCount, 0);
   });
 });
+
+// The exact writes the creator builder makes (src/lib/builder.ts), as the owning creator.
+describe('creator builder writes', () => {
+  test('a creator can save every report type with the fields the task editor sends', async () => {
+    const r = await as(
+      A,
+      `insert into public.tasks (milestone_id, position, title, why, completion_type, check_in_question, target_count, unit,
+                                 follow_up_question, follow_up_options, est_minutes, is_optional)
+       values ($1, 10, 'Call 50 sellers', 'Deals come from conversations.', 'count', 'How many calls did you make?', 50, 'calls',
+               'How did it go?', array['Wants to sell', 'Not motivated'], 90, false),
+              ($1, 11, 'Submit an offer', 'Offers make deals.', 'yes_no', 'Did you submit it?', null, null, null, null, 30, false),
+              ($1, 12, 'Pick a zip code', 'Focus wins.', 'text', 'Which zip and why?', null, null, 'Confident?', null, 20, true),
+              ($1, 13, 'Watch lesson 2', 'Basics first.', 'done', null, null, null, null, null, 15, false)
+       returning completion_type`,
+      [ids.mA2],
+    );
+    assert.deepEqual(
+      r.rows.map((x) => x.completion_type),
+      ['count', 'yes_no', 'text', 'done'],
+    );
+  });
+
+  test('a creator can edit every task field the editor changes', async () => {
+    const r = await as(
+      A,
+      `update public.tasks set title = 'Call 60 sellers', why = 'More calls, more deals.', completion_type = 'count',
+              check_in_question = 'How many?', target_count = 60, unit = 'calls', follow_up_question = null,
+              follow_up_options = null, est_minutes = 120, is_optional = true
+        where id = $1 returning target_count`,
+      [ids.tA1],
+    );
+    assert.equal(r.rows[0].target_count, 60);
+  });
+
+  test("saving a task's resources replaces its links, up to three", async () => {
+    const r1 = await as(
+      A,
+      `with gone as (delete from public.task_resources where task_id = '${ids.tA2}')
+       insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0) returning position`,
+      [ids.tA2, ids.rA],
+    );
+    assert.equal(r1.rowCount, 1);
+    await invalid(
+      as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 3)', [ids.tA2, ids.rA]),
+    );
+  });
+
+  test('archiving hides a milestone and a task from publishing checks', async () => {
+    const r = await as(
+      A,
+      `with m as (update public.milestones set archived_at = now() where id = '${ids.mA2}' returning 1),
+            t as (update public.tasks set archived_at = now() where id = '${ids.tA1}' returning 1)
+       select (select count(*) from m) + (select count(*) from t) as changed`,
+    );
+    assert.equal(Number(r.rows[0].changed), 2);
+    // Another creator's archive matches no rows, so nothing changes.
+    const other = await as(B, 'update public.milestones set archived_at = now() where id = $1', [ids.mA1]);
+    assert.equal(other.rowCount, 0);
+  });
+
+  test('a reorder that keeps archived milestones at the end succeeds', async () => {
+    await db.query('begin');
+    try {
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      await db.query('update public.milestones set archived_at = now() where id = $1', [ids.mA1]);
+      await db.query('select public.reorder_milestones($1, $2)', [ids.progA, [ids.mA2, ids.mA1]]);
+      await db.query('set constraints all immediate');
+      const r = await db.query('select id from public.milestones where program_id = $1 order by position', [ids.progA]);
+      assert.deepEqual(
+        r.rows.map((x) => x.id),
+        [ids.mA2, ids.mA1],
+      );
+    } finally {
+      await db.query('rollback');
+    }
+  });
+
+  test("a creator can change their program's goal, title, and length, within limits", async () => {
+    const r = await as(
+      A,
+      "update public.programs set goal = 'Close your first wholesale deal', title = 'Close your first wholesale deal', duration_weeks = 10 where id = $1 returning duration_weeks",
+      [ids.progA],
+    );
+    assert.equal(r.rows[0].duration_weeks, 10);
+    await invalid(as(A, 'update public.programs set duration_weeks = 53 where id = $1', [ids.progA]));
+    await invalid(as(A, "update public.programs set goal = 'x' where id = $1", [ids.progA]));
+  });
+});

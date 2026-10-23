@@ -12,7 +12,7 @@ export function TextField({ label, style, ...props }: Props) {
       <TextInput
         accessibilityLabel={label}
         placeholderTextColor={Colors.inkMuted}
-        style={[styles.input, style]}
+        style={[styles.input, props.multiline && styles.multiline, style]}
         {...props}
       />
     </View>
@@ -33,5 +33,10 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.body,
     fontSize: 17,
     color: Colors.ink,
+  },
+  multiline: {
+    minHeight: 96,
+    paddingVertical: 14,
+    textAlignVertical: 'top',
   },
 });
