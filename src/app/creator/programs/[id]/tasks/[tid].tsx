@@ -1,5 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
+import { useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 
@@ -102,20 +102,20 @@ function TaskEditor({
   // Set just before leaving after a save or remove, so the unsaved-changes question is skipped.
   const leaving = useRef(false);
 
-  const navigation = useNavigation();
   const leave = () => {
     leaving.current = true;
     goBackOr(parent);
   };
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial);
-  usePreventRemove(dirty, ({ data }) => {
+  // repeat() turns the guard off before navigating; dispatching with the guard on would loop.
+  usePreventRemove(dirty, ({ repeat }) => {
     if (leaving.current) {
-      navigation.dispatch(data.action);
+      repeat();
       return;
     }
     confirm('Discard changes?', 'Your changes to this task haven’t been saved.', 'Discard').then((ok) => {
-      if (ok) navigation.dispatch(data.action);
+      if (ok) repeat();
     });
   });
 

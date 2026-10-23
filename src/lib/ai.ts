@@ -14,6 +14,7 @@ export type AiResult<T> = { ok: true; value: T } | { ok: false; message: string 
 
 const PLAN_WAIT_MS = 140_000;
 const TASK_WAIT_MS = 45_000;
+const IMPORT_WAIT_MS = 30_000;
 
 function db(): SupabaseClient {
   if (!supabase) throw new Error('Supabase is not configured.');
@@ -72,7 +73,16 @@ export async function suggestTask(goal: string, milestone: string, sentence: str
 
 /** Saves the milestones and tasks the creator approved, all or nothing. The program stays a draft. */
 export async function importPlan(programId: string, milestones: SuggestedMilestone[]): Promise<number> {
-  const { data, error } = await db().rpc('import_plan', { program_id: programId, milestones });
-  if (error) throw error;
-  return data as number;
+  // Never leave the save button spinning: give up after 30 seconds and let the screen check what happened.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMPORT_WAIT_MS);
+  try {
+    const { data, error } = await db()
+      .rpc('import_plan', { program_id: programId, milestones })
+      .abortSignal(controller.signal);
+    if (error) throw error;
+    return data as number;
+  } finally {
+    clearTimeout(timer);
+  }
 }

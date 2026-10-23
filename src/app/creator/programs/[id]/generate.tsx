@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams, useNavigation, usePreventRemove } from 'expo-router';
+import { router, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
@@ -60,22 +60,27 @@ function Generator({ detail }: { detail: ProgramDetail }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set just before leaving on purpose, so the "Leave without saving?" question is skipped.
   const leaving = useRef(false);
-  const navigation = useNavigation();
+  // Set once the plan is in the program, so it can never be added twice.
+  const saved = useRef(false);
+  const [existingIds] = useState(() => new Set(detail.milestones.map((m) => m.id)));
 
   const hasExisting = detail.milestones.some((m) => !m.archived_at);
   const tooLong = outline.length > AI_LIMITS.inputChars;
 
   const dirty = phase === 'review' || (phase === 'input' && !!outline.trim());
-  usePreventRemove(dirty, ({ data }) => {
+  // repeat() turns the guard off before navigating. Dispatching the action while the guard is on
+  // is caught by the guard again, which loops until React stops it ("Maximum update depth exceeded").
+  usePreventRemove(dirty, ({ repeat }) => {
     if (leaving.current) {
-      navigation.dispatch(data.action);
+      repeat();
       return;
     }
     const message =
       phase === 'review' ? 'This plan hasn’t been added to your program.' : 'What you pasted will be lost.';
     confirm('Leave without saving?', message, 'Leave').then((ok) => {
-      if (ok) navigation.dispatch(data.action);
+      if (ok) repeat();
     });
   });
 
@@ -129,25 +134,31 @@ function Generator({ detail }: { detail: ProgramDetail }) {
   const problems = reviewProblems(plan);
 
   const onAdd = async () => {
+    if (saving || saved.current) return;
     if (problems.length) {
       setError(problems[0]);
       return;
     }
     setSaving(true);
     setError(null);
+    const milestones = plan.map(({ title, description, tasks }) => ({
+      title: title.trim(),
+      description,
+      tasks: tasks.map(({ key: _key, ...t }) => cleanTask(t)!),
+    }));
     try {
-      const milestones = plan.map(({ title, description, tasks }) => ({
-        title: title.trim(),
-        description,
-        tasks: tasks.map(({ key: _key, ...t }) => cleanTask(t)!),
-      }));
       await importPlan(program.id, milestones);
-      leaveTo(() => goBackOr(parent));
     } catch (e) {
-      // The plan stays on screen, so they can try again.
-      setError(dataErrorMessage(e as { message?: string }));
-      setSaving(false);
+      // A dropped connection can hide a save that worked, so check before offering to try again.
+      if (!(await planWasSaved(program.id, existingIds, milestones[0].title))) {
+        // The plan stays on screen, so they can try again.
+        setError(dataErrorMessage(e as { message?: string }));
+        setSaving(false);
+        return;
+      }
     }
+    saved.current = true;
+    leaveTo(() => goBackOr(parent));
   };
 
   if (phase === 'working') {
@@ -332,6 +343,16 @@ function reportLine(t: SuggestedTask) {
   const label = REPORT_TYPES.find((r) => r.type === t.completion_type)?.label ?? '';
   if (t.completion_type === 'count') return `${label}: ${t.target_count ?? '?'} ${t.unit ?? ''}`.trim();
   return label;
+}
+
+/** True when the program now has a new milestone with the plan's first title, i.e. the import went through. */
+async function planWasSaved(programId: string, before: Set<string>, firstTitle: string) {
+  try {
+    const now = await loadProgram(programId);
+    return now.milestones.some((m) => !before.has(m.id) && m.title === firstTitle);
+  } catch {
+    return false;
+  }
 }
 
 /** What would stop the approved plan from saving, in the creator's words. */
