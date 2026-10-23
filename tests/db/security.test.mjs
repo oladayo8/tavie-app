@@ -569,7 +569,7 @@ describe('join links', () => {
     assert.equal(rows.length, 1);
     assert.deepEqual(
       fields.map((f) => f.name),
-      ['creator_first_name', 'creator_last_name', 'agent_name', 'goal'],
+      ['creator_first_name', 'creator_last_name', 'agent_name', 'goal', 'title'],
     );
     assert.equal(rows[0].goal, 'Make your first sale');
     assert.equal((await as('anon', 'select * from public.get_join_info($1)', [ids.slugB.toUpperCase()])).rowCount, 1);
@@ -842,5 +842,279 @@ describe('AI usage cap and plan import', () => {
     const task = { title: 'Do it', why: 'Because.', completion_type: 'done' };
     const crowded = [{ title: 'Busy', tasks: Array.from({ length: 6 }, () => task) }];
     await invalid(as(A, 'select public.import_plan($1, $2)', [ids.progA, JSON.stringify(crowded)]), '22023');
+  });
+});
+
+describe('students: joining, Today, and check-ins', () => {
+  const C = { id: randomUUID(), email: 'cara@example.com' }; // creator with a live program
+  const J = { id: randomUUID(), email: 'jo@example.com' }; // student who joins
+  const K = { id: randomUUID(), email: 'kai@example.com' }; // another student
+  const t = {};
+  let prog;
+  let slug;
+  let enrollment;
+  let draftSlug;
+
+  const today = async (who) => (await as(who, 'select public.get_today() as card', [], { commit: true })).rows[0].card;
+  const checkIn = async (who, task, kind, extra = {}) => {
+    const r = await as(
+      who,
+      `select public.submit_check_in(enrollment_id => $1, task_id => $2, kind => $3, value_number => $4,
+         value_yes_no => $5, value_text => $6, follow_up_answer => $7, reason => $8, client_request_id => $9) as r`,
+      [
+        extra.enrollment ?? enrollment,
+        task,
+        kind,
+        extra.number ?? null,
+        extra.yes ?? null,
+        extra.text ?? null,
+        extra.followUp ?? null,
+        extra.reason ?? null,
+        extra.requestId ?? null,
+      ],
+      { commit: true },
+    );
+    return r.rows[0].r;
+  };
+
+  before(async () => {
+    for (const u of [C, J, K]) {
+      await db.query('insert into auth.users (id, email) values ($1, $2)', [u.id, u.email]);
+    }
+    await as(C, "select public.register_creator('Cara', 'Lane')", [], { commit: true });
+    await as(J, 'select public.register_student()', [], { commit: true });
+    await as(K, 'select public.register_student()', [], { commit: true });
+    await as(C, "update public.creators set agent_name = 'Cara''s agent' where id = $1", [C.id], { commit: true });
+
+    const p = await as(C, "select * from public.create_program('Close your first wholesale deal', 8)", [], { commit: true });
+    prog = p.rows[0].id;
+    slug = p.rows[0].slug;
+    const m = async (position, title) =>
+      (
+        await as(C, 'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id', [prog, position, title], {
+          commit: true,
+        })
+      ).rows[0].id;
+    const task = async (milestone, position, fields) => {
+      const cols = ['milestone_id', 'position', ...Object.keys(fields)];
+      const vals = [milestone, position, ...Object.values(fields)];
+      const r = await as(
+        C,
+        `insert into public.tasks (${cols.join(', ')}) values (${cols.map((_, i) => `$${i + 1}`).join(', ')}) returning id`,
+        vals,
+        { commit: true },
+      );
+      return r.rows[0].id;
+    };
+    const m1 = await m(0, 'Get set up');
+    const m2 = await m(1, 'Make offers');
+    t.done = await task(m1, 0, { title: 'Watch the welcome lesson', why: 'It shows the whole path.' });
+    t.count = await task(m1, 1, {
+      title: 'Call 50 sellers',
+      why: 'Deals come from conversations.',
+      completion_type: 'count',
+      target_count: 50,
+      unit: 'calls',
+      check_in_question: 'How many calls did you make?',
+      follow_up_question: 'How did it go?',
+      follow_up_options: ['Wants to sell', 'Not motivated'],
+    });
+    t.optional = await task(m1, 2, { title: 'Join the community', why: 'Extra help.', is_optional: true });
+    t.archived = await task(m1, 3, { title: 'Old task', why: 'Gone.' });
+    await as(C, 'update public.tasks set archived_at = now() where id = $1', [t.archived], { commit: true });
+    t.yesNo = await task(m2, 0, {
+      title: 'Submit one offer',
+      why: 'Offers make deals.',
+      completion_type: 'yes_no',
+      check_in_question: 'Did you submit it?',
+    });
+    t.text = await task(m2, 1, {
+      title: 'Write your offer script',
+      why: 'So you say it the same way every time.',
+      completion_type: 'text',
+      check_in_question: 'Paste your script.',
+    });
+    const r = await as(C, "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Welcome lesson', 'https://example.com/w') returning id", [prog], {
+      commit: true,
+    });
+    await as(C, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [t.done, r.rows[0].id], { commit: true });
+    await as(C, 'insert into storage.objects (bucket_id, name) values ($1, $2)', ['program-files', `${C.id}/${prog}/script.pdf`], { commit: true });
+    const published = await as(C, 'select public.publish_program($1) as r', [prog], { commit: true });
+    assert.equal(published.rows[0].r.ok, true, JSON.stringify(published.rows[0].r));
+
+    const draft = await as(C, "select * from public.create_program('A draft program', 4)", [], { commit: true });
+    draftSlug = draft.rows[0].slug;
+  });
+
+  test('the join screen shows the program title and creator', async () => {
+    const { rows } = await as('anon', 'select * from public.get_join_info($1)', [slug]);
+    assert.deepEqual(rows[0], {
+      creator_first_name: 'Cara',
+      creator_last_name: 'Lane',
+      agent_name: "Cara's agent",
+      goal: 'Close your first wholesale deal',
+      title: 'Close your first wholesale deal',
+    });
+  });
+
+  test('only signed-in students can join, and only live programs', async () => {
+    await assert.rejects(as('anon', 'select public.join_program($1)', [slug]));
+    await denied(as(C, 'select public.join_program($1)', [slug]));
+    await denied(as(N, 'select public.join_program($1)', [slug]));
+    await denied(as(X, 'select public.join_program($1)', [slug]));
+    await invalid(as(J, 'select public.join_program($1)', [draftSlug]), 'P0002');
+    await invalid(as(J, 'select public.join_program($1)', ['no-such-coach']), 'P0002');
+    await invalid(as(J, 'select public.join_program($1)', ['x'.repeat(5000)]), 'P0002');
+  });
+
+  test('a student who has not joined anything has no Today card', async () => {
+    assert.equal(await today(K), null);
+  });
+
+  test('joining enrolls the student in that program and shows the first task', async () => {
+    const card = (await as(J, 'select public.join_program($1) as card', [slug.toUpperCase()], { commit: true })).rows[0].card;
+    enrollment = card.enrollment_id;
+    assert.equal(card.program.title, 'Close your first wholesale deal');
+    assert.deepEqual(card.creator, { first_name: 'Cara', last_name: 'Lane', agent_name: "Cara's agent" });
+    assert.equal(card.task.id, t.done);
+    assert.equal(card.task.state, 'current');
+    assert.deepEqual(card.milestone, { number: 1, count: 2, title: 'Get set up' });
+    assert.deepEqual(card.progress, { done: 0, total: 5 }); // the archived task doesn't count
+    assert.deepEqual(
+      card.resources.map((r) => r.title),
+      ['Welcome lesson'],
+    );
+    const rows = await as('postgres', 'select student_id, program_id, consented_at is not null as consent from public.enrollments where id = $1', [enrollment]);
+    assert.deepEqual(rows.rows[0], { student_id: J.id, program_id: prog, consent: true });
+    // Joining again changes nothing.
+    const again = (await as(J, 'select public.join_program($1) as card', [slug], { commit: true })).rows[0].card;
+    assert.equal(again.enrollment_id, enrollment);
+    assert.equal((await as('postgres', 'select count(*)::int as n from public.enrollments where student_id = $1', [J.id])).rows[0].n, 1);
+  });
+
+  test('students and creators cannot touch enrollment tables or engine helpers directly', async () => {
+    for (const table of ['enrollments', 'task_progress', 'check_ins']) {
+      await denied(as(J, `select * from public.${table}`));
+      await denied(as(C, `select * from public.${table}`));
+    }
+    await denied(as(J, "insert into public.task_progress (enrollment_id, task_id, state) values ($1, $2, 'done')", [enrollment, t.done]));
+    await denied(as(J, 'select private.current_task($1)', [enrollment]));
+    await denied(as(J, 'select private.today_card($1)', [enrollment]));
+    // Still no direct reads of the program itself.
+    assert.equal((await as(J, 'select * from public.tasks where id = $1', [t.done])).rowCount, 0);
+  });
+
+  test("nobody else can check in on a student's enrollment", async () => {
+    await denied(as(K, 'select public.submit_check_in($1, $2, $3)', [enrollment, t.done, 'complete']));
+    await denied(as(C, 'select public.submit_check_in($1, $2, $3)', [enrollment, t.done, 'complete']));
+    await denied(as(B, 'select public.submit_check_in($1, $2, $3)', [enrollment, t.done, 'complete']));
+    await assert.rejects(as('anon', 'select public.submit_check_in($1, $2, $3)', [enrollment, t.done, 'complete']));
+  });
+
+  test('a required task cannot be skipped, and a done task moves to the next one', async () => {
+    await invalid(checkIn(J, t.done, 'skip'), '22023');
+    const r = await checkIn(J, t.done, 'complete');
+    assert.equal(r.state, 'done');
+    assert.equal(r.today.task.id, t.count);
+    assert.equal(r.today.task.count_so_far, 0);
+    assert.deepEqual(r.today.progress, { done: 1, total: 5 });
+  });
+
+  test('a stale screen cannot move the student forward twice', async () => {
+    const r = await checkIn(J, t.done, 'complete');
+    assert.equal(r.ok, false);
+    assert.equal(r.stale, true);
+    assert.equal(r.today.task.id, t.count);
+    assert.equal((await as('postgres', 'select count(*)::int as n from public.check_ins where enrollment_id = $1', [enrollment])).rows[0].n, 1);
+  });
+
+  test('a number task keeps partial progress, and a retried request counts once', async () => {
+    await invalid(checkIn(J, t.count, 'complete'), '22023');
+    await invalid(checkIn(J, t.count, 'progress', { number: 1000 }), '22023');
+    await invalid(checkIn(J, t.count, 'progress', { number: 5, followUp: 'Made up answer' }), '22023');
+    const requestId = randomUUID();
+    const first = await checkIn(J, t.count, 'progress', { number: 20, followUp: 'Wants to sell', requestId });
+    assert.equal(first.state, 'in_progress');
+    assert.equal(first.today.task.id, t.count);
+    assert.equal(first.today.task.count_so_far, 20);
+    const retry = await checkIn(J, t.count, 'progress', { number: 20, followUp: 'Wants to sell', requestId });
+    assert.equal(retry.repeat, true);
+    assert.equal(retry.today.task.count_so_far, 20);
+  });
+
+  test('stuck keeps the student on the task until they say they figured it out', async () => {
+    await invalid(checkIn(J, t.count, 'stuck', { reason: 'Bored' }), '22023');
+    await invalid(checkIn(J, t.count, 'unstuck'), '22023');
+    const stuck = await checkIn(J, t.count, 'stuck', { reason: "I don't know how", text: 'Nobody answers.' });
+    assert.equal(stuck.today.task.id, t.count);
+    assert.equal(stuck.today.task.state, 'stuck');
+    assert.equal(stuck.today.task.count_so_far, 20);
+    const back = await checkIn(J, t.count, 'unstuck');
+    assert.equal(back.today.task.state, 'in_progress');
+  });
+
+  test('reaching the target finishes a number task; an optional task can be skipped', async () => {
+    const done = await checkIn(J, t.count, 'progress', { number: 30 });
+    assert.equal(done.state, 'done');
+    assert.equal(done.today.task.id, t.optional);
+    const skipped = await checkIn(J, t.optional, 'skip');
+    assert.equal(skipped.state, 'skipped');
+    // The archived task is never shown; the next milestone starts.
+    assert.equal(skipped.today.task.id, t.yesNo);
+    assert.deepEqual(skipped.today.milestone, { number: 2, count: 2, title: 'Make offers' });
+  });
+
+  test('"Not yet" keeps a yes/no task open; "Yes" finishes it', async () => {
+    await invalid(checkIn(J, t.yesNo, 'complete', { yes: false }), '22023');
+    await invalid(checkIn(J, t.yesNo, 'not_yet', { reason: 'Meh' }), '22023');
+    const notYet = await checkIn(J, t.yesNo, 'not_yet', { yes: false, reason: 'Ran out of time' });
+    assert.equal(notYet.today.task.id, t.yesNo);
+    const yes = await checkIn(J, t.yesNo, 'complete', { yes: true });
+    assert.equal(yes.today.task.id, t.text);
+  });
+
+  test('a paused program takes no check-ins', async () => {
+    await db.query('begin');
+    try {
+      await db.query("update public.programs set status = 'paused' where id = $1", [prog]);
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: J.id, role: 'authenticated' })]);
+      await assert.rejects(
+        db.query("select public.submit_check_in($1, $2, 'complete', value_text => 'A long enough answer')", [enrollment, t.text]),
+        (e) => e.code === '55000',
+      );
+    } finally {
+      await db.query('rollback');
+    }
+  });
+
+  test('a short answer needs 10 characters; the last task finishes the path', async () => {
+    await invalid(checkIn(J, t.text, 'complete', { text: 'too short' }), '22023');
+    const r = await checkIn(J, t.text, 'complete', { text: 'Hi, I buy houses for cash in your area.' });
+    assert.equal(r.today.task, null);
+    assert.deepEqual(r.today.progress, { done: 5, total: 5 });
+    const e = await as('postgres', 'select finished_at is not null as finished, last_active_at is not null as active from public.enrollments where id = $1', [enrollment]);
+    assert.deepEqual(e.rows[0], { finished: true, active: true });
+    const log = await as('postgres', 'select kind, actor, actor_id = $2 as by_student from public.check_ins where enrollment_id = $1 order by id', [enrollment, J.id]);
+    assert.deepEqual(
+      log.rows.map((x) => x.kind),
+      ['complete', 'progress', 'stuck', 'unstuck', 'progress', 'skip', 'not_yet', 'complete', 'complete'],
+    );
+    assert.ok(log.rows.every((x) => x.actor === 'student' && x.by_student));
+  });
+
+  test("students can open their program's files, and no one else's", async () => {
+    const see = (who, name) => as(who, "select name from storage.objects where bucket_id = 'program-files' and name = $1", [name]);
+    assert.equal((await see(J, `${C.id}/${prog}/script.pdf`)).rowCount, 1);
+    assert.equal((await see(K, `${C.id}/${prog}/script.pdf`)).rowCount, 0);
+    assert.equal((await see(B, `${C.id}/${prog}/script.pdf`)).rowCount, 0);
+    // Joining doesn't let them write there.
+    assert.equal(
+      await as(J, 'insert into storage.objects (bucket_id, name) values ($1, $2)', ['program-files', `${C.id}/${prog}/x.pdf`]).then(
+        () => 'inserted',
+        () => 'refused',
+      ),
+      'refused',
+    );
   });
 });

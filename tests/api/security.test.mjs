@@ -190,7 +190,7 @@ describe('publishing and join links', () => {
     assert.equal(pub.data.ok, true);
     const { data } = await anon.rpc('get_join_info', { slug: ids.slugB });
     assert.equal(data.length, 1);
-    assert.deepEqual(Object.keys(data[0]).sort(), ['agent_name', 'creator_first_name', 'creator_last_name', 'goal']);
+    assert.deepEqual(Object.keys(data[0]).sort(), ['agent_name', 'creator_first_name', 'creator_last_name', 'goal', 'title']);
   });
 });
 
@@ -450,5 +450,100 @@ describe('AI plan generator limits and plan import', () => {
     const bad = [{ title: 'Bad', tasks: [{ title: 'Count with no target', completion_type: 'count' }] }];
     assert.ok((await d.rpc('import_plan', { program_id: progId, milestones: bad })).error);
     assert.deepEqual((await d.from('milestones').select('id').eq('title', 'Bad')).data, []);
+  });
+});
+
+describe('students: invite, enrollment, Today, and check-ins', () => {
+  let e; // creator with a live program
+  let j; // student who joins
+  let slug;
+  let enrollment;
+  const t = {};
+
+  before(async () => {
+    e = (await makeUser('E')).client;
+    assert.equal((await e.rpc('register_creator', { first_name: 'Eve', last_name: `Stone ${run}` })).error, null);
+    assert.equal((await e.from('creators').update({ agent_name: "Eve's agent" }).eq('id', users.E.id)).error, null);
+    const p = await e.rpc('create_program', { goal: 'Close your first wholesale deal', duration_weeks: 8 });
+    assert.equal(p.error, null);
+    slug = p.data.slug;
+    const m = await e.from('milestones').insert({ program_id: p.data.id, position: 0, title: 'Get started' }).select().single();
+    assert.equal(m.error, null);
+    const rows = [
+      { milestone_id: m.data.id, position: 0, title: 'Watch the welcome lesson', why: 'It shows the path.' },
+      {
+        milestone_id: m.data.id,
+        position: 1,
+        title: 'Call 50 sellers',
+        why: 'Deals come from conversations.',
+        completion_type: 'count',
+        target_count: 50,
+        unit: 'calls',
+        check_in_question: 'How many calls?',
+      },
+    ];
+    const tasks = await e.from('tasks').insert(rows, { defaultToNull: false }).select('id, position').order('position');
+    assert.equal(tasks.error, null);
+    [t.first, t.count] = tasks.data.map((x) => x.id);
+    const pub = await e.rpc('publish_program', { program_id: p.data.id });
+    assert.equal(pub.data?.ok, true, JSON.stringify(pub));
+
+    j = (await makeUser('J')).client;
+    assert.equal((await j.rpc('register_student')).error, null);
+  });
+
+  test('the invite shows the program title and creator before sign-in', async () => {
+    const info = await anon.rpc('get_join_info', { slug });
+    assert.equal(info.error, null);
+    assert.equal(info.data[0].title, 'Close your first wholesale deal');
+    assert.equal(info.data[0].creator_first_name, 'Eve');
+  });
+
+  test('joining creates one enrollment linked to that program and shows the first task', async () => {
+    const r = await j.rpc('join_program', { slug });
+    assert.equal(r.error, null);
+    enrollment = r.data.enrollment_id;
+    assert.equal(r.data.task.id, t.first);
+    assert.equal(r.data.program.title, 'Close your first wholesale deal');
+    const row = await admin.from('enrollments').select('student_id, program_id, programs(slug)').eq('id', enrollment).single();
+    assert.equal(row.data.student_id, users.J.id);
+    assert.equal(row.data.programs.slug, slug);
+    assert.equal((await j.rpc('join_program', { slug })).data.enrollment_id, enrollment);
+    assert.equal((await admin.from('enrollments').select('id').eq('student_id', users.J.id)).data.length, 1);
+  });
+
+  test('check-ins save, partial counts persist, and done moves to the next task', async () => {
+    const done = await j.rpc('submit_check_in', { enrollment_id: enrollment, task_id: t.first, kind: 'complete', client_request_id: randomUUID() });
+    assert.equal(done.error, null);
+    assert.equal(done.data.today.task.id, t.count);
+    const part = await j.rpc('submit_check_in', { enrollment_id: enrollment, task_id: t.count, kind: 'progress', value_number: 20, client_request_id: randomUUID() });
+    assert.equal(part.data.today.task.count_so_far, 20);
+    // A fresh read (like reopening the app) shows the same saved progress.
+    const today = await j.rpc('get_today');
+    assert.equal(today.data.task.id, t.count);
+    assert.equal(today.data.task.count_so_far, 20);
+    const stuck = await j.rpc('submit_check_in', { enrollment_id: enrollment, task_id: t.count, kind: 'stuck', reason: "I don't know how" });
+    assert.equal(stuck.data.today.task.state, 'stuck');
+    const rest = await j.rpc('submit_check_in', { enrollment_id: enrollment, task_id: t.count, kind: 'progress', value_number: 30 });
+    assert.equal(rest.data.state, 'done');
+    assert.equal(rest.data.today.task, null);
+    const log = await admin.from('check_ins').select('kind').eq('enrollment_id', enrollment).order('id');
+    assert.deepEqual(
+      log.data.map((x) => x.kind),
+      ['complete', 'progress', 'stuck', 'progress'],
+    );
+  });
+
+  test("other students and creators can't see or change this student's progress", async () => {
+    for (const client of [users.S.client, users.A.client, e]) {
+      refused(await client.from('enrollments').select('*'));
+      refused(await client.from('check_ins').select('*'));
+      refused(await client.from('task_progress').select('*'));
+      assert.ok((await client.rpc('submit_check_in', { enrollment_id: enrollment, task_id: t.count, kind: 'progress', value_number: 1 })).error);
+    }
+    refused(await anon.from('enrollments').select('*'));
+    // Joining doesn't open the program tables to the student.
+    assert.deepEqual((await j.from('tasks').select('id')).data ?? [], []);
+    assert.deepEqual((await j.from('creators').select('email')).data ?? [], []);
   });
 });

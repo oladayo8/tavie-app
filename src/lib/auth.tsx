@@ -1,7 +1,7 @@
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { getArrival } from '@/lib/arrival';
+import { clearArrival, getArrival } from '@/lib/arrival';
 import { resolveAccess, type Access } from '@/lib/role';
 import { supabase } from '@/lib/supabase';
 
@@ -88,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={{ ...state, refresh }}>{children}</AuthContext.Provider>;
 }
 
+/** Also forgets the join link, so the next person to sign in on this phone isn't enrolled from it. */
 export async function signOut() {
+  await clearArrival();
   await supabase?.auth.signOut();
 }

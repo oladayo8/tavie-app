@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.two,
   },
   phone: {
-    padding: Spacing.four,
+    padding: Spacing.three,
     borderRadius: 32,
     borderWidth: 2,
     borderColor: Colors.ink,
