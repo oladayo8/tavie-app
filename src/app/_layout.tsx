@@ -37,7 +37,7 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const { session, role, loading } = useAuth();
+  const { session, access, loading } = useAuth();
 
   useEffect(() => {
     if (!loading) SplashScreen.hideAsync();
@@ -45,6 +45,7 @@ function RootStack() {
 
   if (loading) return null;
 
+  // Each signed-in screen opens only for the access the database gave this person.
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.paper } }}>
       <Stack.Protected guard={!session}>
@@ -52,11 +53,17 @@ function RootStack() {
         <Stack.Screen name="sign-in" />
         <Stack.Screen name="verify" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && role === 'creator'}>
+      <Stack.Protected guard={!!session && access === 'creator'}>
         <Stack.Screen name="creator/index" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && role === 'student'}>
+      <Stack.Protected guard={!!session && access === 'needs-name'}>
+        <Stack.Screen name="creator/name" />
+      </Stack.Protected>
+      <Stack.Protected guard={!!session && access === 'student'}>
         <Stack.Screen name="student/index" />
+      </Stack.Protected>
+      <Stack.Protected guard={!!session && access === 'none'}>
+        <Stack.Screen name="no-access" />
       </Stack.Protected>
       <Stack.Screen name="j/[slug]" />
     </Stack>

@@ -13,3 +13,15 @@ export function authErrorMessage(error: { message?: string; status?: number; cod
   }
   return error.message || 'Something went wrong. Please try again.';
 }
+
+/** Turns a database or network error into a short, friendly sentence. */
+export function dataErrorMessage(error: { message?: string; code?: string } | null): string {
+  if (!error) return 'Something went wrong. Please try again.';
+  const msg = error.message?.toLowerCase() ?? '';
+  if (msg.includes('network') || msg.includes('fetch')) {
+    return "Can't reach Tavie. Check your connection and try again.";
+  }
+  if (error.code === '42501') return "You don't have access to that.";
+  if (error.code === '23514') return 'Please check what you entered and try again.';
+  return 'Something went wrong. Please try again.';
+}
