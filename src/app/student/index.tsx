@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Linking, StyleSheet, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Choices } from '@/components/rows';
@@ -8,7 +8,8 @@ import { ErrorState, ErrorText, Loading } from '@/components/states';
 import { Body, Headline, Label } from '@/components/text';
 import { TextField } from '@/components/text-field';
 import { TodayCard } from '@/components/today-card';
-import { Colors, Radius, Spacing } from '@/constants/theme';
+import { Wordmark } from '@/components/wordmark';
+import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { getArrival } from '@/lib/arrival';
 import { signOut } from '@/lib/auth';
 import { confirm } from '@/lib/confirm';
@@ -29,7 +30,7 @@ import { afterCheckIn, newRequestId } from '@/lib/today';
 
 /**
  * Student home: the one task for today. Joining from a coach's link enrolls them here.
- * Student-facing screens carry the creator's brand; Tavie is only "Powered by Tavie".
+ * A compact Tavie bar on top, then the program, then one task card. Built for a phone screen.
  */
 export default function StudentHome() {
   const [card, setCard] = useState<Card | null | undefined>(undefined);
@@ -64,17 +65,10 @@ export default function StudentHome() {
     load();
   }, [load]);
 
-  const footer = (
-    <>
-      {card?.progress.total ? <PathProgress done={card.progress.done} total={card.progress.total} /> : null}
-      <Button variant="link" title="Sign out" onPress={signOut} />
-      <Label style={styles.powered}>Powered by Tavie</Label>
-    </>
-  );
-
   if (card === undefined) {
     return (
-      <Screen footer={footer}>
+      <Screen>
+        <TodayHeader />
         {error ? <ErrorState message={error} onRetry={load} /> : <Loading label="Loading your task" />}
       </Screen>
     );
@@ -82,55 +76,53 @@ export default function StudentHome() {
 
   if (card === null) {
     return (
-      <Screen footer={footer}>
-        <View style={styles.center}>
-          <Label>Today</Label>
-          <Headline>You’re signed in.</Headline>
+      <Screen>
+        <TodayHeader />
+        <View style={styles.stateCard}>
+          <Headline style={styles.stateTitle}>You’re signed in.</Headline>
           <Body muted>{joinError ?? 'Open your coach’s link to start your plan.'}</Body>
         </View>
+        <Powered />
       </Screen>
     );
   }
 
   const coach = card.creator.first_name;
-  const header = (
-    <Label>
-      {[card.creator.first_name, card.creator.last_name].filter(Boolean).join(' ')} · {card.program.title}
-    </Label>
-  );
 
   if (card.program.status !== 'live') {
     return (
-      <Screen footer={footer}>
-        <View style={styles.center}>
-          {header}
-          <Headline>{coach} has paused this program.</Headline>
+      <Screen>
+        <TodayHeader card={card} />
+        <View style={styles.stateCard}>
+          <Headline style={styles.stateTitle}>{coach} has paused this program.</Headline>
           <Body muted>Your progress is saved. You’ll be able to pick up where you left off.</Body>
         </View>
+        <Powered />
       </Screen>
     );
   }
 
   if (!card.task) {
     return (
-      <Screen footer={footer}>
-        <View style={styles.center}>
-          {header}
-          <Headline>You finished {coach}’s path.</Headline>
+      <Screen>
+        <TodayHeader card={card} />
+        <View style={styles.stateCard}>
+          <Headline style={styles.stateTitle}>You finished {coach}’s path.</Headline>
           <Body muted>{card.program.goal}</Body>
         </View>
+        <Powered />
       </Screen>
     );
   }
 
   return (
-    <Screen footer={footer}>
+    <Screen>
+      <TodayHeader card={card} />
       <View style={styles.content}>
-        {header}
         {message ? (
-          <Body accessibilityRole="alert" style={styles.message}>
-            {message}
-          </Body>
+          <View style={styles.message} accessibilityRole="alert">
+            <Body style={styles.messageText}>{message}</Body>
+          </View>
         ) : null}
         <TaskToday
           key={card.task.id}
@@ -142,8 +134,55 @@ export default function StudentHome() {
           }}
         />
       </View>
+      <Powered />
     </Screen>
   );
+}
+
+/** Compact top: Tavie, sign out, then the program, its coach, and where they are on the path. */
+function TodayHeader({ card }: { card?: Card }) {
+  const coachName = card ? [card.creator.first_name, card.creator.last_name].filter(Boolean).join(' ') : '';
+  const milestone = card?.milestone;
+  return (
+    <View style={styles.header}>
+      <View style={styles.bar}>
+        <Wordmark size={24} />
+        <Pressable
+          accessibilityRole="button"
+          onPress={signOut}
+          hitSlop={8}
+          style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
+          <Text maxFontSizeMultiplier={1.3} style={styles.signOutText}>
+            Sign out
+          </Text>
+        </Pressable>
+      </View>
+      {card ? (
+        <View style={styles.program}>
+          <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={styles.programTitle} numberOfLines={2}>
+            {card.program.title}
+          </Text>
+          {coachName ? (
+            <Text maxFontSizeMultiplier={1.3} style={styles.coach}>
+              with {coachName}
+            </Text>
+          ) : null}
+          {milestone && card.progress.total ? (
+            <PathProgress
+              milestone={milestone}
+              done={card.progress.done}
+              total={card.progress.total}
+              finished={!card.task}
+            />
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function Powered() {
+  return <Label style={styles.powered}>Powered by Tavie</Label>;
 }
 
 type Mode = 'idle' | 'report' | 'not_yet' | 'stuck';
@@ -384,7 +423,7 @@ function TaskToday({
   const stuckNotice =
     task.state === 'stuck' ? (
       <View style={styles.notice}>
-        <Body>You said you’re stuck on this. {coach} can see it.</Body>
+        <Body style={styles.noticeText}>You said you’re stuck on this. {coach} can see it.</Body>
         <Button
           variant="secondary"
           title="I figured it out"
@@ -411,6 +450,7 @@ function TaskToday({
         stuck={task.state === 'stuck'}
         actions={actions}
         showPowered={false}
+        showMilestone={false}
       />
       {mode === 'idle' ? <ErrorText message={error} /> : null}
     </>
@@ -427,72 +467,172 @@ async function openResource(card: Card, id: string) {
     // Opening is best effort; the task itself stays on screen.
   }
 }
-
-function PathProgress({ done, total }: { done: number; total: number }) {
+/** One segment per milestone, then where they are in words. */
+function PathProgress({
+  milestone,
+  done,
+  total,
+  finished,
+}: {
+  milestone: { number: number; count: number; title: string };
+  done: number;
+  total: number;
+  finished: boolean;
+}) {
+  const segments = Array.from({ length: milestone.count }, (_, i) =>
+    finished || i < milestone.number - 1 ? 'done' : i === milestone.number - 1 ? 'current' : 'later',
+  );
   return (
-    <View style={styles.progress} accessibilityLabel={`${done} of ${total} tasks done`}>
-      <Body muted style={styles.progressText}>
-        {done} of {total} tasks
-      </Body>
-      <View style={styles.track}>
-        <View style={[styles.fill, { width: `${Math.min(100, (done / total) * 100)}%` }]} />
+    <View
+      style={styles.progress}
+      accessible
+      accessibilityLabel={`Milestone ${milestone.number} of ${milestone.count}, ${milestone.title}. ${done} of ${total} tasks done.`}>
+      <View style={styles.segments}>
+        {segments.map((kind, i) => (
+          <View key={i} style={[styles.segment, styles[kind]]} />
+        ))}
+      </View>
+      <View style={styles.progressRow}>
+        <Text maxFontSizeMultiplier={1.3} style={styles.progressText} numberOfLines={1}>
+          {finished ? 'Path complete' : `Milestone ${milestone.number} of ${milestone.count} · ${milestone.title}`}
+        </Text>
+        <Text maxFontSizeMultiplier={1.2} style={styles.progressCount}>
+          {done}/{total} tasks
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    gap: Spacing.three,
-    paddingTop: Spacing.three,
+  header: {
+    gap: 20,
+    paddingBottom: 20,
   },
-  center: {
-    flex: 1,
+  bar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  signOut: {
+    minHeight: 36,
     justifyContent: 'center',
-    gap: Spacing.three,
   },
-  message: {
-    color: Colors.emerald,
-  },
-  sheet: {
-    gap: Spacing.three,
-    padding: Spacing.three,
-    borderRadius: Radius.card,
-    borderWidth: 1.5,
-    borderColor: Colors.ink,
-    backgroundColor: Colors.white,
-  },
-  notice: {
-    gap: Spacing.two,
-    padding: Spacing.three,
-    borderRadius: Radius.card,
-    borderWidth: 1.5,
-    borderColor: Colors.error,
-    backgroundColor: Colors.white,
-  },
-  counter: {
+  signOutText: {
+    fontFamily: Fonts.bodyMedium,
     fontSize: 14,
-    textAlign: 'right',
+    color: Colors.inkMuted,
+  },
+  pressed: {
+    opacity: 0.6,
+  },
+  program: {
+    gap: 4,
+  },
+  programTitle: {
+    fontFamily: Fonts.display,
+    fontSize: 22,
+    lineHeight: 26,
+    letterSpacing: -0.4,
+    color: Colors.ink,
+  },
+  coach: {
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    color: Colors.inkMuted,
   },
   progress: {
-    gap: Spacing.one,
+    gap: 8,
+    paddingTop: 12,
   },
-  progressText: {
-    fontSize: 14,
-    textAlign: 'center',
+  segments: {
+    flexDirection: 'row',
+    gap: 4,
   },
-  track: {
+  segment: {
+    flex: 1,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.line,
-    overflow: 'hidden',
   },
-  fill: {
-    height: 6,
+  done: {
     backgroundColor: Colors.emerald,
   },
+  current: {
+    backgroundColor: Colors.mint,
+  },
+  later: {
+    backgroundColor: Colors.line,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+  },
+  progressText: {
+    flex: 1,
+    fontFamily: Fonts.bodyMedium,
+    fontSize: 13,
+    color: Colors.ink,
+  },
+  progressCount: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.inkMuted,
+  },
+  content: {
+    gap: 12,
+  },
+  stateCard: {
+    gap: Spacing.two,
+    padding: 20,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.line,
+    backgroundColor: Colors.white,
+  },
+  stateTitle: {
+    fontSize: 24,
+    lineHeight: 28,
+    letterSpacing: -0.5,
+  },
+  message: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(95, 216, 160, 0.22)',
+  },
+  messageText: {
+    fontFamily: Fonts.bodyMedium,
+    fontSize: 15,
+    lineHeight: 21,
+    color: Colors.forest,
+  },
+  sheet: {
+    gap: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.line,
+  },
+  notice: {
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.error,
+    backgroundColor: '#FDF3F2',
+  },
+  noticeText: {
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  counter: {
+    fontSize: 13,
+    textAlign: 'right',
+  },
   powered: {
+    marginTop: 'auto',
+    paddingTop: Spacing.four,
     textAlign: 'center',
-    paddingTop: Spacing.two,
+    fontSize: 10,
   },
 });

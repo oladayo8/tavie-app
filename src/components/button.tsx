@@ -32,7 +32,9 @@ export function Button({ title, variant = 'primary', loading, disabled, style, .
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? Colors.white : Colors.ink} />
       ) : (
-        <Text style={[styles.text, textStyles[variant]]}>{title}</Text>
+        <Text maxFontSizeMultiplier={1.3} style={[styles.text, textStyles[variant]]}>
+          {title}
+        </Text>
       )}
     </Pressable>
   );
