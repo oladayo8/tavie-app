@@ -267,7 +267,8 @@ describe('creator builder', () => {
     }
     const tasks = await c
       .from('tasks')
-      .insert([
+      .insert(
+        [
         { milestone_id: m.m1, position: 0, title: 'Watch lesson 1', why: 'Basics first.', completion_type: 'done' },
         {
           milestone_id: m.m1,
@@ -284,7 +285,10 @@ describe('creator builder', () => {
         },
         { milestone_id: m.m2, position: 0, title: 'Submit an offer', why: 'Offers make deals.', completion_type: 'yes_no', check_in_question: 'Did you submit it?' },
         { milestone_id: m.m2, position: 1, title: 'Pick a zip', why: 'Focus wins.', completion_type: 'text', check_in_question: 'Which zip and why?', is_optional: true },
-      ])
+        ],
+        // Rows list different columns; let missing ones take their defaults instead of null.
+        { defaultToNull: false },
+      )
       .select('id, completion_type');
     assert.equal(tasks.error, null);
     m.tasks = tasks.data;
