@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
@@ -17,8 +18,8 @@ export type TodayCardTask = {
 const RESOURCE_KIND: Record<ResourceType, string> = { youtube: 'YouTube', link: 'Link', file: 'PDF' };
 
 /**
- * The student's one task for today (spec section 3). The creator preview uses it now;
- * the student Today screen reuses it in Milestone 3, so the preview can't drift.
+ * The student's one task for today (spec section 3). The creator preview and the student
+ * Today screen both use it, so the preview can't drift.
  */
 export function TodayCard({
   task,
@@ -28,7 +29,13 @@ export function TodayCard({
   resources,
   loggedSoFar = 0,
   onPrimary,
+  onStuck,
+  onSkip,
   onResource,
+  notice,
+  actions,
+  showPowered = true,
+  stuck = false,
 }: {
   task: TodayCardTask;
   milestoneNumber: number;
@@ -37,7 +44,16 @@ export function TodayCard({
   resources: { id: string; title: string; type: ResourceType }[];
   loggedSoFar?: number;
   onPrimary?: () => void;
+  onStuck?: () => void;
+  onSkip?: () => void;
   onResource?: (id: string) => void;
+  /** Shown under the title, e.g. "You said you're stuck". */
+  notice?: ReactNode;
+  /** Replaces the buttons, e.g. with the check-in questions. */
+  actions?: ReactNode;
+  showPowered?: boolean;
+  /** Already stuck: hides "I'm stuck" (the notice offers "I figured it out"). */
+  stuck?: boolean;
 }) {
   const target = task.completion_type === 'count' ? task.target_count : null;
   return (
@@ -56,6 +72,7 @@ export function TodayCard({
           </View>
         </View>
       ) : null}
+      {notice}
       {task.why ? <Body>{task.why}</Body> : null}
       {resources.length ? (
         <View style={styles.resources}>
@@ -75,12 +92,16 @@ export function TodayCard({
           ))}
         </View>
       ) : null}
-      <Button title={studentButton(task.completion_type, task.unit)} onPress={onPrimary} />
-      <View style={styles.escapes}>
-        <Button variant="link" title="I’m stuck" onPress={onPrimary} />
-        {task.is_optional ? <Button variant="link" title="Skip this one" onPress={onPrimary} /> : null}
-      </View>
-      <Label style={styles.powered}>Powered by Tavie</Label>
+      {actions ?? (
+        <>
+          <Button title={studentButton(task.completion_type, task.unit)} onPress={onPrimary} />
+          <View style={styles.escapes}>
+            {stuck ? null : <Button variant="link" title="I’m stuck" onPress={onStuck ?? onPrimary} />}
+            {task.is_optional ? <Button variant="link" title="Skip this one" onPress={onSkip ?? onPrimary} /> : null}
+          </View>
+        </>
+      )}
+      {showPowered ? <Label style={styles.powered}>Powered by Tavie</Label> : null}
     </View>
   );
 }

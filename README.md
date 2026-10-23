@@ -60,7 +60,8 @@ Supabase's built-in email sender is rate limited (a few emails per hour). Add cu
 | `/creator/programs/[id]/generate` | Plan with Tavie: paste an existing course (optional), review and edit the suggested plan, then add it |
 | `/creator/programs/[id]/tasks/[tid]` | Task editor (`new` for a new task): one-sentence Suggest, action, why, report type, resources; follow-up, minutes and skipping under "Edit details" |
 | `/creator/programs/[id]/agent`, `/preview`, `/share` | Agent name, student preview (saves nothing), join link with Copy |
-| `/student` | Student home (Today card arrives in Milestone 3) |
+| `/j/[slug]` | A coach's join link: program title, coach, and "<coach> can see your progress and check-ins" |
+| `/student` | Today: joins the program from the link, then shows the one current task with its check-in (done, number, yes/no, short answer), I'm stuck, and skip for optional tasks |
 | `/no-access` | Signed in with no role and no link: "Ask your coach for your Tavie link" |
 
 There is no role picker. How someone arrives picks a side, but only the database grants access: a person is a
@@ -72,6 +73,14 @@ and a student if they have a `students` row. User metadata is never used for rol
 `supabase/migrations/` holds every database change. Each table has row-level security; logged-out users can
 only call `get_join_info`; creators see only their own programs; registering, creating, and publishing programs go through server
 functions that check the caller. See the migration file's comments for the full list.
+
+## Students and check-ins
+
+Students never read program tables. `join_program(slug)` enrolls a signed-in student in a live program,
+`get_today()` returns their one current task, and `submit_check_in(...)` records a report in `check_ins` and
+updates `task_progress` in one locked transaction. The next task is always the first unfinished task in the
+creator's order; a task finishes only when its report meets the creator's condition. Students can open PDFs only
+for live programs they joined.
 
 ## AI plan generator
 
