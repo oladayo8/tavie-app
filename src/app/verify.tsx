@@ -8,12 +8,8 @@ import { Body, Headline, Label } from '@/components/text';
 import { TextField } from '@/components/text-field';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { authErrorMessage } from '@/lib/errors';
+import { CODE_LENGTH, secondsUntilResend, sendCode } from '@/lib/otp';
 import { supabase } from '@/lib/supabase';
-
-const RESEND_SECONDS = 60;
-// Supabase codes are 6 digits by default; the length is configurable up to 10.
-const MIN_CODE = 6;
-const MAX_CODE = 10;
 
 export default function VerifyScreen() {
   const { email } = useLocalSearchParams<{ email: string }>();
@@ -21,7 +17,7 @@ export default function VerifyScreen() {
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [cooldown, setCooldown] = useState(RESEND_SECONDS);
+  const [cooldown, setCooldown] = useState(() => secondsUntilResend(email));
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -30,10 +26,14 @@ export default function VerifyScreen() {
   }, [cooldown]);
 
   const onVerify = async () => {
-    if (!supabase || code.length < MIN_CODE) return;
+    if (!supabase || code.length < CODE_LENGTH) return;
     setVerifying(true);
     setError(null);
-    const { error } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' });
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email',
+    });
     // On success the auth listener updates the session and the route guards take over.
     if (error) {
       setVerifying(false);
@@ -45,20 +45,21 @@ export default function VerifyScreen() {
     if (!supabase) return;
     setError(null);
     setNotice(null);
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+    const { error, skipped } = await sendCode(supabase, email);
+    // Always show the real wait, so nobody taps their way into a longer rate limit.
+    setCooldown(secondsUntilResend(email));
     if (error) {
       setError(authErrorMessage(error));
       return;
     }
-    setCooldown(RESEND_SECONDS);
-    setNotice('New code sent.');
+    if (!skipped) setNotice('New code sent.');
   };
 
   return (
     <Screen
       footer={
         <>
-          <Button title="Verify" onPress={onVerify} loading={verifying} disabled={code.length < MIN_CODE} />
+          <Button title="Verify" onPress={onVerify} loading={verifying} disabled={code.length < CODE_LENGTH} />
           <Button
             variant="link"
             title={cooldown > 0 ? `Send a new code in ${cooldown}s` : 'Send a new code'}
@@ -71,16 +72,18 @@ export default function VerifyScreen() {
       <View style={styles.content}>
         <Label>Check your email</Label>
         <Headline>Enter your code.</Headline>
-        <Body muted>We sent it to {email}.</Body>
+        <Body muted>
+          We sent a {CODE_LENGTH}-digit code to {email}.
+        </Body>
         <TextField
           label="Code"
           value={code}
-          onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, MAX_CODE))}
+          onChangeText={(t) => setCode(t.replace(/\D/g, '').slice(0, CODE_LENGTH))}
           placeholder="123456"
           keyboardType="number-pad"
           autoComplete="one-time-code"
           textContentType="oneTimeCode"
-          maxLength={MAX_CODE}
+          maxLength={CODE_LENGTH}
           returnKeyType="done"
           onSubmitEditing={onVerify}
           style={styles.code}

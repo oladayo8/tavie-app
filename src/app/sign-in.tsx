@@ -10,6 +10,7 @@ import { TextField } from '@/components/text-field';
 import { Colors, Spacing } from '@/constants/theme';
 import { getArrival, type Arrival } from '@/lib/arrival';
 import { authErrorMessage } from '@/lib/errors';
+import { hasSentCode, secondsUntilResend, sendCode } from '@/lib/otp';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,15 +32,17 @@ export default function SignInScreen() {
     if (!supabase || !valid) return;
     setSending(true);
     setError(null);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: trimmed,
-      options: { shouldCreateUser: true },
-    });
+    const { error, skipped } = await sendCode(supabase, trimmed);
     setSending(false);
     if (error) {
       setError(authErrorMessage(error));
       return;
     }
+    if (skipped && !hasSentCode(trimmed)) {
+      setError(`Too many tries. Wait ${secondsUntilResend(trimmed)} seconds, then try again.`);
+      return;
+    }
+    // A code sent in the last minute is still good, so skipped sends go straight to the code screen.
     router.push({ pathname: '/verify', params: { email: trimmed } });
   };
 
