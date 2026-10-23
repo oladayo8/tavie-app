@@ -190,7 +190,7 @@ describe('publishing and join links', () => {
     assert.equal(pub.data.ok, true);
     const { data } = await anon.rpc('get_join_info', { slug: ids.slugB });
     assert.equal(data.length, 1);
-    assert.deepEqual(Object.keys(data[0]).sort(), ['agent_name', 'creator_first_name', 'creator_last_name', 'goal']);
+    assert.deepEqual(Object.keys(data[0]).sort(), ['agent_name', 'creator_first_name', 'creator_last_name', 'goal', 'title']);
   });
 });
 
