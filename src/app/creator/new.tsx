@@ -13,7 +13,7 @@ import { createProgram } from '@/lib/builder';
 import { dataErrorMessage } from '@/lib/errors';
 import { goalIsValid, LIMITS, parseWeeks } from '@/lib/program';
 
-/** Goal, then length: one question per screen, as in the Brief. */
+/** Goal, then length: one question per screen, as in the Brief. Then Tavie offers to draft the plan. */
 export default function NewProgramScreen() {
   const [step, setStep] = useState<'goal' | 'weeks'>('goal');
   const [goal, setGoal] = useState('');
@@ -30,7 +30,7 @@ export default function NewProgramScreen() {
     try {
       const program = await createProgram(goal, parsedWeeks);
       router.replace({ pathname: '/creator/programs/[id]', params: { id: program.id } });
-      router.push({ pathname: '/creator/programs/[id]/milestones', params: { id: program.id } });
+      router.push({ pathname: '/creator/programs/[id]/generate', params: { id: program.id } });
     } catch (e) {
       setSaving(false);
       setError(dataErrorMessage(e as { message?: string }));

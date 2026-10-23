@@ -713,3 +713,134 @@ describe('creator builder writes', () => {
     await invalid(as(A, "update public.programs set goal = 'x' where id = $1", [ids.progA]));
   });
 });
+
+// The AI plan generator's server side (20261023170000_ai_plan_generator.sql).
+describe('AI usage cap and plan import', () => {
+  const plan = [
+    {
+      title: 'Find your market',
+      tasks: [
+        { title: 'Pick one zip code', why: 'Focus wins.', completion_type: 'text', check_in_question: 'Which zip and why?', est_minutes: 45 },
+        {
+          title: 'Call 50 sellers',
+          why: 'Deals come from conversations.',
+          completion_type: 'count',
+          check_in_question: 'How many calls did you make?',
+          target_count: 50,
+          unit: 'calls',
+          follow_up_question: 'How did it go?',
+          follow_up_options: ['Wants to sell', 'Not motivated'],
+          est_minutes: 120,
+        },
+      ],
+    },
+    { title: 'Make offers', tasks: [{ title: 'Submit one offer', why: 'Offers make deals.', completion_type: 'yes_no', check_in_question: 'Did you submit it?' }] },
+  ];
+
+  // Runs SQL as creator A inside one transaction (rolled back), so start and finish calls see each other.
+  const loop = (body) => `do $$ declare i int; begin ${body} end $$`;
+
+  test('only signed-in creators can use AI', async () => {
+    await assert.rejects(as('anon', "select public.start_ai_request('plan')"));
+    await denied(as(S, "select public.start_ai_request('plan')"));
+    await denied(as(N, "select public.start_ai_request('plan')"));
+    await denied(as(X, "select public.start_ai_request('plan')"));
+    await as(A, "select public.start_ai_request('plan')");
+    await invalid(as(A, "select public.start_ai_request('other')"), '22023');
+    await assert.rejects(as('anon', 'select public.finish_ai_request(1, true)'));
+  });
+
+  test('a creator can run only one AI request at a time', async () => {
+    await invalid(as(A, loop("perform public.start_ai_request('task'); perform public.start_ai_request('plan');")), '55P03');
+    await as(A, loop("perform public.finish_ai_request(public.start_ai_request('task'), true); perform public.start_ai_request('plan');"));
+  });
+
+  test('a creator gets 5 plans and 30 task suggestions a day, then is refused', async () => {
+    const plans = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;";
+    const tasks = "for i in 1..30 loop perform public.finish_ai_request(public.start_ai_request('task'), true); end loop;";
+    await as(A, loop(plans + tasks));
+    await invalid(as(A, loop(plans + "perform public.start_ai_request('plan');")), '54000');
+    await invalid(as(A, loop(tasks + "perform public.start_ai_request('task');")), '54000');
+    // The limits are per creator.
+    await as(A, loop(plans + "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: B.id, role: 'authenticated' }) + "', true); perform public.start_ai_request('plan');"));
+  });
+
+  test('requests that never reached Claude do not count, and one that died stops blocking', async () => {
+    const failed = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), false); end loop;";
+    const done = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;";
+    await as(A, loop(failed + done));
+    await invalid(as(A, loop(failed + done + "perform public.start_ai_request('plan');")), '54000');
+
+    await db.query('begin');
+    try {
+      await db.query("insert into public.ai_requests (creator_id, kind, created_at) values ($1, 'plan', now() - interval '5 minutes')", [A.id]);
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      await db.query("select public.start_ai_request('task')");
+    } finally {
+      await db.query('rollback');
+    }
+  });
+
+  test("a creator cannot finish someone else's request", async () => {
+    const asB = "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: B.id, role: 'authenticated' }) + "', true);";
+    const asA = "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: A.id, role: 'authenticated' }) + "', true);";
+    await invalid(
+      as(A, loop(`i := public.start_ai_request('plan'); ${asB} perform public.finish_ai_request(i, true); ${asA} perform public.start_ai_request('plan');`)),
+      '55P03',
+    );
+  });
+
+  test('nobody can read or write the usage table directly', async () => {
+    await denied(as(A, 'select * from public.ai_requests'));
+    await denied(as(A, "insert into public.ai_requests (creator_id, kind) values ($1, 'plan')", [A.id]));
+    await denied(as(A, "update public.ai_requests set status = 'failed'"));
+  });
+
+  test("a creator can import an approved plan into their own draft, after what's there", async () => {
+    await db.query('begin');
+    try {
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      const before = await db.query('select max(position) as p from public.milestones where program_id = $1', [ids.progA]);
+      const r = await db.query('select public.import_plan($1, $2) as saved', [ids.progA, JSON.stringify(plan)]);
+      assert.equal(r.rows[0].saved, 3);
+      const added = await db.query(
+        `select m.title, m.position, count(t.id)::int as tasks
+           from public.milestones m left join public.tasks t on t.milestone_id = m.id
+          where m.program_id = $1 and m.position > $2 group by m.id order by m.position`,
+        [ids.progA, before.rows[0].p],
+      );
+      assert.deepEqual(
+        added.rows.map((x) => [x.title, x.tasks]),
+        [
+          ['Find your market', 2],
+          ['Make offers', 1],
+        ],
+      );
+      const count = await db.query("select target_count, follow_up_options from public.tasks where title = 'Call 50 sellers'");
+      assert.deepEqual(count.rows[0], { target_count: 50, follow_up_options: ['Wants to sell', 'Not motivated'] });
+    } finally {
+      await db.query('rollback');
+    }
+  });
+
+  test("a plan cannot go into another creator's program or a live one", async () => {
+    await denied(as(A, 'select public.import_plan($1, $2)', [ids.progB, JSON.stringify(plan)]));
+    await denied(as(B, 'select public.import_plan($1, $2)', [ids.progB, JSON.stringify(plan)])); // live
+    await denied(as(S, 'select public.import_plan($1, $2)', [ids.progA, JSON.stringify(plan)]));
+  });
+
+  test('an invalid task stops the whole import', async () => {
+    const bad = [{ title: 'Bad', tasks: [{ title: 'Count with no target', completion_type: 'count' }] }];
+    await invalid(as(A, 'select public.import_plan($1, $2)', [ids.progA, JSON.stringify(bad)]));
+    const empty = await as(A, "select count(*)::int as n from public.milestones where title = 'Bad'");
+    assert.equal(empty.rows[0].n, 0);
+    await invalid(as(A, 'select public.import_plan($1, $2)', [ids.progA, '[]']), '22023');
+    const many = Array.from({ length: 11 }, (_, i) => ({ title: `M${i}`, tasks: [] }));
+    await invalid(as(A, 'select public.import_plan($1, $2)', [ids.progA, JSON.stringify(many)]), '22023');
+    const task = { title: 'Do it', why: 'Because.', completion_type: 'done' };
+    const crowded = [{ title: 'Busy', tasks: Array.from({ length: 6 }, () => task) }];
+    await invalid(as(A, 'select public.import_plan($1, $2)', [ids.progA, JSON.stringify(crowded)]), '22023');
+  });
+});

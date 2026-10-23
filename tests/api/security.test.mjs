@@ -356,3 +356,99 @@ describe('creator builder', () => {
     assert.equal(join.data[0].agent_name, "Cara's agent");
   });
 });
+
+describe('AI plan generator limits and plan import', () => {
+  let d; // creator D, so other tests' limits and programs aren't touched
+  let progId;
+  const plan = [
+    {
+      title: 'Find your market',
+      description: 'Pick where you will buy.',
+      tasks: [
+        { title: 'Pick one zip code', why: 'Focus wins.', completion_type: 'text', check_in_question: 'Which zip and why?', est_minutes: 45 },
+        {
+          title: 'Call 50 sellers',
+          why: 'Deals come from conversations.',
+          completion_type: 'count',
+          check_in_question: 'How many calls did you make?',
+          target_count: 50,
+          unit: 'calls',
+          follow_up_question: 'How did it go?',
+          follow_up_options: ['Wants to sell', 'Not motivated'],
+          est_minutes: 120,
+          is_optional: false,
+        },
+      ],
+    },
+    { title: 'Make offers', tasks: [{ title: 'Submit one offer', why: 'Offers make deals.', completion_type: 'yes_no', check_in_question: 'Did you submit it?' }] },
+  ];
+
+  before(async () => {
+    d = (await makeUser('D')).client;
+    assert.equal((await d.rpc('register_creator', { first_name: 'Dee', last_name: `Cole ${run}` })).error, null);
+    const p = await d.rpc('create_program', { goal: 'Help students close their first wholesale deal', duration_weeks: 8 });
+    assert.equal(p.error, null);
+    progId = p.data.id;
+  });
+
+  test('logged-out users and students cannot start an AI request', async () => {
+    assert.ok((await anon.rpc('start_ai_request', { kind: 'plan' })).error);
+    assert.equal((await users.S.client.rpc('start_ai_request', { kind: 'plan' })).error?.code, '42501');
+    assert.equal((await users.N.client.rpc('start_ai_request', { kind: 'plan' })).error?.code, '42501');
+  });
+
+  test('one request at a time, failed requests are free, and 5 plans a day', async () => {
+    const first = await d.rpc('start_ai_request', { kind: 'plan' });
+    assert.equal(first.error, null);
+    assert.equal((await d.rpc('start_ai_request', { kind: 'task' })).error?.code, '55P03');
+    // Another creator can't finish it for them.
+    assert.equal((await users.A.client.rpc('finish_ai_request', { request_id: first.data, reached_ai: false })).error, null);
+    assert.equal((await d.rpc('start_ai_request', { kind: 'task' })).error?.code, '55P03');
+    assert.equal((await d.rpc('finish_ai_request', { request_id: first.data, reached_ai: false })).error, null);
+
+    for (let i = 0; i < 5; i++) {
+      const r = await d.rpc('start_ai_request', { kind: 'plan' });
+      assert.equal(r.error, null, `plan ${i + 1}`);
+      assert.equal((await d.rpc('finish_ai_request', { request_id: r.data, reached_ai: true })).error, null);
+    }
+    assert.equal((await d.rpc('start_ai_request', { kind: 'plan' })).error?.code, '54000');
+    // Task suggestions have their own limit.
+    const t = await d.rpc('start_ai_request', { kind: 'task' });
+    assert.equal(t.error, null);
+    await d.rpc('finish_ai_request', { request_id: t.data, reached_ai: true });
+  });
+
+  test('parallel requests cannot slip past the one-at-a-time rule', async () => {
+    const results = await Promise.all(Array.from({ length: 5 }, () => d.rpc('start_ai_request', { kind: 'task' })));
+    const started = results.filter((r) => !r.error);
+    assert.equal(started.length, 1);
+    assert.ok(results.filter((r) => r.error).every((r) => r.error.code === '55P03'));
+    await d.rpc('finish_ai_request', { request_id: started[0].data, reached_ai: true });
+  });
+
+  test('the usage table is closed to everyone but those functions', async () => {
+    refused(await d.from('ai_requests').select('*'));
+    assert.ok((await d.from('ai_requests').insert({ creator_id: users.D.id, kind: 'plan' })).error);
+  });
+
+  test('an approved plan saves into the creator’s own draft, and the program stays a draft', async () => {
+    const r = await d.rpc('import_plan', { program_id: progId, milestones: plan });
+    assert.equal(r.error, null);
+    assert.equal(r.data, 3);
+    const ms = await d.from('milestones').select('title, position, tasks(title, completion_type, target_count, follow_up_options)').eq('program_id', progId).order('position');
+    assert.deepEqual(ms.data.map((m) => [m.title, m.tasks.length]), [['Find your market', 2], ['Make offers', 1]]);
+    const calls = ms.data[0].tasks.find((t) => t.title === 'Call 50 sellers');
+    assert.deepEqual(calls.follow_up_options, ['Wants to sell', 'Not motivated']);
+    assert.equal((await d.from('programs').select('status').eq('id', progId).single()).data.status, 'draft');
+  });
+
+  test("a plan can't go into another creator's program, and bad plans save nothing", async () => {
+    assert.ok((await users.A.client.rpc('import_plan', { program_id: progId, milestones: plan })).error);
+    assert.ok((await users.S.client.rpc('import_plan', { program_id: progId, milestones: plan })).error);
+    const tooMany = Array.from({ length: 11 }, (_, i) => ({ title: `M${i}`, tasks: [] }));
+    assert.equal((await d.rpc('import_plan', { program_id: progId, milestones: tooMany })).error?.code, '22023');
+    const bad = [{ title: 'Bad', tasks: [{ title: 'Count with no target', completion_type: 'count' }] }];
+    assert.ok((await d.rpc('import_plan', { program_id: progId, milestones: bad })).error);
+    assert.deepEqual((await d.from('milestones').select('id').eq('title', 'Bad')).data, []);
+  });
+});
