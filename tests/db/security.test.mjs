@@ -765,6 +765,27 @@ describe('AI usage cap and plan import', () => {
     await as(A, loop(plans + "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: B.id, role: 'authenticated' }) + "', true); perform public.start_ai_request('plan');"));
   });
 
+  test('with the daily limits turned off, only the one-at-a-time rule applies', async () => {
+    await db.query('begin');
+    try {
+      await db.query('update private.ai_limits set daily_limit = null');
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      await db.query(
+        loop("for i in 1..40 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;"),
+      );
+      await db.query("select public.start_ai_request('task')");
+      await assert.rejects(db.query("select public.start_ai_request('plan')"), (e) => e.code === '55P03');
+    } finally {
+      await db.query('rollback');
+    }
+  });
+
+  test('nobody can read or change the limit settings through the API', async () => {
+    await denied(as(A, 'select * from private.ai_limits'));
+    await denied(as(A, 'update private.ai_limits set daily_limit = null'));
+  });
+
   test('requests that never reached Claude do not count, and one that died stops blocking', async () => {
     const failed = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), false); end loop;";
     const done = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;";
