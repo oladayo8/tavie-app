@@ -15,14 +15,16 @@ import { useAuth } from '@/lib/auth';
  */
 export default function JoinScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const { session, role } = useAuth();
+  const { session, refresh } = useAuth();
 
   const onContinue = async () => {
+    await setArrival({ role: 'student', slug });
     if (session) {
-      router.replace(role === 'student' ? '/student' : '/creator');
+      // Already signed in: the database lookup decides where they land.
+      await refresh();
+      router.replace('/student');
       return;
     }
-    await setArrival({ role: 'student', slug });
     router.push('/sign-in');
   };
 
