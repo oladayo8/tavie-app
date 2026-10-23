@@ -10,7 +10,7 @@ import { TextField } from '@/components/text-field';
 import { Colors, Spacing } from '@/constants/theme';
 import { getArrival, type Arrival } from '@/lib/arrival';
 import { authErrorMessage } from '@/lib/errors';
-import { hasSentCode, secondsUntilResend, sendCode } from '@/lib/otp';
+import { CODE_LENGTH, hasSentCode, secondsUntilResend, sendCode } from '@/lib/otp';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -57,7 +57,7 @@ export default function SignInScreen() {
       <View style={styles.content}>
         <Label>{arrival?.role === 'student' ? 'Join your coach' : 'Creator sign in'}</Label>
         <Headline>What’s your email?</Headline>
-        <Body muted>We’ll send you a one-time code. No password needed.</Body>
+        <Body muted>We’ll email you a {CODE_LENGTH}-digit code. No password needed.</Body>
         {!isSupabaseConfigured ? <SetupNotice /> : null}
         <TextField
           label="Email"

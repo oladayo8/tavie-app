@@ -71,10 +71,8 @@ export default function VerifyScreen() {
       }>
       <View style={styles.content}>
         <Label>Check your email</Label>
-        <Headline>Enter your code.</Headline>
-        <Body muted>
-          We sent a {CODE_LENGTH}-digit code to {email}.
-        </Body>
+        <Headline>Enter the {CODE_LENGTH}-digit code.</Headline>
+        <Body muted>We emailed it to {email}. Type it below.</Body>
         <TextField
           label="Code"
           value={code}
