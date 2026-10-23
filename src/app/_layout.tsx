@@ -64,6 +64,7 @@ function RootStack() {
         <Stack.Screen name="creator/programs/[id]/agent" />
         <Stack.Screen name="creator/programs/[id]/preview" />
         <Stack.Screen name="creator/programs/[id]/share" />
+        <Stack.Screen name="creator/students/[id]" />
       </Stack.Protected>
       <Stack.Protected guard={!!session && access === 'needs-name'}>
         <Stack.Screen name="creator/name" />

@@ -547,3 +547,127 @@ describe('students: invite, enrollment, Today, and check-ins', () => {
     assert.deepEqual((await j.from('creators').select('email')).data ?? [], []);
   });
 });
+
+describe('creator dashboard', () => {
+  let f; // creator with students
+  let g; // creator with no published program
+  let prog;
+  let slug;
+  const t = {};
+  const enr = {};
+  const kid = {};
+
+  const check = async (key, task, kind, extra = {}) => {
+    const r = await kid[key].rpc('submit_check_in', { enrollment_id: enr[key], task_id: task, kind, ...extra });
+    assert.equal(r.error, null, JSON.stringify(r.error));
+    return r.data;
+  };
+
+  before(async () => {
+    f = (await makeUser('F')).client;
+    g = (await makeUser('G')).client;
+    assert.equal((await f.rpc('register_creator', { first_name: 'Fay', last_name: run })).error, null);
+    assert.equal((await g.rpc('register_creator', { first_name: 'Gus', last_name: run })).error, null);
+    await f.from('creators').update({ agent_name: "Fay's agent" }).eq('id', users.F.id);
+    const p = await f.rpc('create_program', { goal: 'Close your first deal', duration_weeks: 4 });
+    prog = p.data.id;
+    slug = p.data.slug;
+    const m = await f.from('milestones').insert({ program_id: prog, position: 0, title: 'Get started' }).select().single();
+    const tasks = await f
+      .from('tasks')
+      .insert(
+        [
+          { milestone_id: m.data.id, position: 0, title: 'Watch the welcome lesson', why: 'It shows the path.' },
+          {
+            milestone_id: m.data.id,
+            position: 1,
+            title: 'Call 10 sellers',
+            why: 'Talk to sellers.',
+            completion_type: 'count',
+            target_count: 10,
+            unit: 'calls',
+            check_in_question: 'How many calls?',
+          },
+        ],
+        { defaultToNull: false },
+      )
+      .select('id, position')
+      .order('position');
+    [t.watch, t.calls] = tasks.data.map((x) => x.id);
+    assert.equal((await f.rpc('publish_program', { program_id: prog })).data?.ok, true);
+
+    for (const key of ['going', 'stuck', 'resolved', 'quiet', 'done']) {
+      kid[key] = (await makeUser(`K${key}`)).client;
+      assert.equal((await kid[key].rpc('register_student')).error, null);
+      enr[key] = (await kid[key].rpc('join_program', { slug })).data.enrollment_id;
+    }
+    await check('going', t.watch, 'complete');
+    await check('going', t.calls, 'progress', { value_number: 4 });
+    await check('stuck', t.watch, 'stuck', { reason: "I don't know how", value_text: 'The video will not load.' });
+    await check('resolved', t.watch, 'stuck', { reason: 'Something outside my control' });
+    await check('resolved', t.watch, 'unstuck');
+    await check('done', t.watch, 'complete');
+    await check('done', t.calls, 'progress', { value_number: 10 });
+    // Joined 5 days ago and never checked in (the service key stands in for the passage of time).
+    const old = new Date(Date.now() - 5 * 24 * 3600e3).toISOString();
+    assert.equal((await admin.from('enrollments').update({ started_at: old }).eq('id', enr.quiet)).error, null);
+  });
+
+  test('a creator with no published program gets an empty dashboard', async () => {
+    const d = await g.rpc('creator_dashboard', { program_id: null });
+    assert.equal(d.error, null);
+    assert.deepEqual(d.data, { programs: [], program_id: null, counts: null, students: [] });
+  });
+
+  test('counts and statuses come from what students reported, needs-attention first', async () => {
+    const d = await f.rpc('creator_dashboard', { program_id: null });
+    assert.equal(d.error, null);
+    assert.equal(d.data.program_id, prog);
+    assert.deepEqual(d.data.counts, { enrolled: 5, progressing: 2, needs_attention: 2, completed: 1 });
+    const by = Object.fromEntries(d.data.students.map((s) => [s.enrollment_id, s]));
+    assert.deepEqual(
+      d.data.students.slice(0, 2).map((s) => [s.enrollment_id, s.attention]),
+      [
+        [enr.stuck, 'blocker'],
+        [enr.quiet, 'inactive'],
+      ],
+    );
+    assert.equal(by[enr.stuck].blocker.reason, "I don't know how");
+    assert.equal(by[enr.going].status, 'progressing');
+    assert.equal(by[enr.going].task.count_so_far, 4);
+    assert.deepEqual(by[enr.going].progress, { done: 1, total: 2 });
+    assert.equal(by[enr.resolved].status, 'progressing');
+    assert.equal(by[enr.done].status, 'completed');
+    assert.equal(d.data.students.at(-1).enrollment_id, enr.done);
+  });
+
+  test('student detail shows each check-in, the written note, and whether a blocker was resolved', async () => {
+    const open = await f.rpc('creator_student', { enrollment_id: enr.stuck });
+    assert.equal(open.error, null);
+    const stuck = open.data.check_ins.find((c) => c.kind === 'stuck');
+    assert.equal(stuck.value_text, 'The video will not load.');
+    assert.equal(stuck.resolved_by, null);
+    const closed = (await f.rpc('creator_student', { enrollment_id: enr.resolved })).data;
+    assert.equal(closed.check_ins.find((c) => c.kind === 'stuck').resolved_by, 'unstuck');
+    const going = (await f.rpc('creator_student', { enrollment_id: enr.going })).data;
+    assert.deepEqual(
+      going.check_ins.map((c) => [c.kind, c.value_number]),
+      [
+        ['progress', 4],
+        ['complete', null],
+      ],
+    );
+    assert.equal(going.path[0].tasks[1].count_so_far, 4);
+  });
+
+  test("other creators, students, and logged-out callers can't read it", async () => {
+    assert.ok((await users.A.client.rpc('creator_dashboard', { program_id: prog })).error);
+    assert.ok((await users.A.client.rpc('creator_student', { enrollment_id: enr.going })).error);
+    assert.ok(!JSON.stringify((await users.A.client.rpc('creator_dashboard', { program_id: null })).data).includes(enr.going));
+    assert.ok((await kid.going.rpc('creator_dashboard', { program_id: null })).error);
+    assert.ok((await kid.going.rpc('creator_student', { enrollment_id: enr.going })).error);
+    assert.ok((await kid.stuck.rpc('creator_student', { enrollment_id: enr.going })).error);
+    assert.ok((await anon.rpc('creator_dashboard', { program_id: null })).error);
+    assert.ok((await anon.rpc('creator_student', { enrollment_id: enr.going })).error);
+  });
+});
