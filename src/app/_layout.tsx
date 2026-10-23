@@ -55,6 +55,14 @@ function RootStack() {
       </Stack.Protected>
       <Stack.Protected guard={!!session && access === 'creator'}>
         <Stack.Screen name="creator/index" />
+        <Stack.Screen name="creator/new" />
+        <Stack.Screen name="creator/programs/[id]/index" />
+        <Stack.Screen name="creator/programs/[id]/milestones/index" />
+        <Stack.Screen name="creator/programs/[id]/milestones/[mid]" />
+        <Stack.Screen name="creator/programs/[id]/tasks/[tid]" />
+        <Stack.Screen name="creator/programs/[id]/agent" />
+        <Stack.Screen name="creator/programs/[id]/preview" />
+        <Stack.Screen name="creator/programs/[id]/share" />
       </Stack.Protected>
       <Stack.Protected guard={!!session && access === 'needs-name'}>
         <Stack.Screen name="creator/name" />

@@ -53,7 +53,12 @@ Supabase's built-in email sender is rate limited (a few emails per hour). Add cu
 | `/j/[slug]` | Creator share link (student arrival). Try `exp://<your-ip>:8081/--/j/marcus-wholesaling` in Expo Go |
 | `/sign-in`, `/verify` | Email one-time code |
 | `/creator/name` | "What's your name?" The explicit step that makes someone a creator |
-| `/creator` | Creator home (builder arrives in Milestone 2 PR 2) |
+| `/creator` | Your programs (Draft or Live) |
+| `/creator/new` | New program: goal, then length |
+| `/creator/programs/[id]` | Program overview: goal, length, path, what publishing still needs, Publish |
+| `/creator/programs/[id]/milestones` and `/milestones/[mid]` | Add, rename, reorder, and remove milestones and their tasks |
+| `/creator/programs/[id]/tasks/[tid]` | Task editor (`new` for a new task): action, why, report type, resources, minutes |
+| `/creator/programs/[id]/agent`, `/preview`, `/share` | Agent name, student preview (saves nothing), join link with Copy |
 | `/student` | Student home (Today card arrives in Milestone 3) |
 | `/no-access` | Signed in with no role and no link: "Ask your coach for your Tavie link" |
 

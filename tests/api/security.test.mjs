@@ -239,3 +239,120 @@ describe('file storage', () => {
     assert.equal((await users.A.client.storage.from('program-files').download(path)).error, null);
   });
 });
+
+// The creator builder's calls (src/lib/builder.ts), end to end, as a fresh creator.
+describe('creator builder', () => {
+  let c;
+  let progId;
+  const m = {};
+
+  before(async () => {
+    c = (await makeUser('C')).client;
+    const reg = await c.rpc('register_creator', { first_name: 'Cara', last_name: `Builder ${run}` });
+    if (reg.error) throw reg.error;
+  });
+
+  test('creates a program, milestones, and every kind of task', async () => {
+    const p = await c.rpc('create_program', { goal: 'Get your first property under contract', duration_weeks: 8 });
+    assert.equal(p.error, null);
+    progId = p.data.id;
+    for (const [key, position, title] of [
+      ['m1', 0, 'Find a market'],
+      ['m2', 1, 'Make offers'],
+      ['m3', 2, 'Spare'],
+    ]) {
+      const r = await c.from('milestones').insert({ program_id: progId, position, title }).select('id').single();
+      assert.equal(r.error, null);
+      m[key] = r.data.id;
+    }
+    const tasks = await c
+      .from('tasks')
+      .insert(
+        [
+        { milestone_id: m.m1, position: 0, title: 'Watch lesson 1', why: 'Basics first.', completion_type: 'done' },
+        {
+          milestone_id: m.m1,
+          position: 1,
+          title: 'Call 50 sellers',
+          why: 'Deals come from conversations.',
+          completion_type: 'count',
+          check_in_question: 'How many calls did you make?',
+          target_count: 50,
+          unit: 'calls',
+          follow_up_question: 'How did it go?',
+          follow_up_options: ['Wants to sell', 'Not motivated'],
+          est_minutes: 90,
+        },
+        { milestone_id: m.m2, position: 0, title: 'Submit an offer', why: 'Offers make deals.', completion_type: 'yes_no', check_in_question: 'Did you submit it?' },
+        { milestone_id: m.m2, position: 1, title: 'Pick a zip', why: 'Focus wins.', completion_type: 'text', check_in_question: 'Which zip and why?', is_optional: true },
+        ],
+        // Rows list different columns; let missing ones take their defaults instead of null.
+        { defaultToNull: false },
+      )
+      .select('id, completion_type');
+    assert.equal(tasks.error, null);
+    m.tasks = tasks.data;
+    const noTarget = await c.from('tasks').insert({ milestone_id: m.m2, position: 5, title: 'Bad', completion_type: 'count' });
+    assert.ok(noTarget.error, 'a number task needs a target');
+  });
+
+  test('attaches resources to a task and replaces them on save', async () => {
+    const r = await c
+      .from('resources')
+      .insert({ program_id: progId, type: 'youtube', title: 'Lesson 4', url: 'https://youtu.be/abc' })
+      .select('id')
+      .single();
+    assert.equal(r.error, null);
+    const taskId = m.tasks[0].id;
+    assert.equal((await c.from('task_resources').delete().eq('task_id', taskId)).error, null);
+    assert.equal((await c.from('task_resources').insert([{ task_id: taskId, resource_id: r.data.id, position: 0 }])).error, null);
+    const links = await c.from('task_resources').select('resource_id').eq('task_id', taskId);
+    assert.deepEqual(links.data, [{ resource_id: r.data.id }]);
+  });
+
+  test('reorders and archives milestones, and the order sticks', async () => {
+    assert.equal((await c.from('milestones').update({ archived_at: new Date().toISOString() }).eq('id', m.m3)).error, null);
+    const re = await c.rpc('reorder_milestones', { program_id: progId, ids: [m.m2, m.m1, m.m3] });
+    assert.equal(re.error, null);
+    const rows = await c.from('milestones').select('id').eq('program_id', progId).order('position');
+    assert.deepEqual(
+      rows.data.map((x) => x.id),
+      [m.m2, m.m1, m.m3],
+    );
+  });
+
+  test('the programs list counts only active milestones and tasks', async () => {
+    const { data, error } = await c
+      .from('programs')
+      .select('id, status, milestones(id, archived_at, tasks(id, archived_at))')
+      .order('updated_at', { ascending: false });
+    assert.equal(error, null);
+    assert.equal(data.length, 1);
+    const active = data[0].milestones.filter((x) => !x.archived_at);
+    assert.equal(active.length, 2);
+    assert.equal(active.reduce((n, x) => n + x.tasks.length, 0), 4);
+  });
+
+  test("another creator can't see or change any of it", async () => {
+    const b = users.B.client;
+    assert.deepEqual((await b.from('milestones').select('id').eq('program_id', progId)).data, []);
+    refused(await b.from('tasks').update({ title: 'Hijacked' }).eq('id', m.tasks[0].id).select());
+    refused(await b.from('programs').update({ goal: 'Hijacked goal' }).eq('id', progId).select());
+    assert.ok((await b.rpc('publish_program', { program_id: progId })).error);
+  });
+
+  test('publishes once the agent is named, and the join link shows it', async () => {
+    const first = await c.rpc('publish_program', { program_id: progId });
+    assert.equal(first.data.ok, false);
+    assert.deepEqual(
+      first.data.problems.map((p) => p.code),
+      ['agent_name'],
+    );
+    assert.equal((await c.from('creators').update({ agent_name: "Cara's agent" }).eq('id', users.C.id)).error, null);
+    const pub = await c.rpc('publish_program', { program_id: progId });
+    assert.equal(pub.data.ok, true);
+    const slug = (await c.from('programs').select('slug').eq('id', progId).single()).data.slug;
+    const join = await anon.rpc('get_join_info', { slug });
+    assert.equal(join.data[0].agent_name, "Cara's agent");
+  });
+});
