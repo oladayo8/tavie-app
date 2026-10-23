@@ -397,7 +397,7 @@ describe('AI plan generator limits and plan import', () => {
     assert.equal((await users.N.client.rpc('start_ai_request', { kind: 'plan' })).error?.code, '42501');
   });
 
-  test('one request at a time, failed requests are free, and 5 plans a day', async () => {
+  test('one request at a time, failed requests are free, and 5 plans a day unless turned off', async (ctx) => {
     const first = await d.rpc('start_ai_request', { kind: 'plan' });
     assert.equal(first.error, null);
     assert.equal((await d.rpc('start_ai_request', { kind: 'task' })).error?.code, '55P03');
@@ -411,7 +411,14 @@ describe('AI plan generator limits and plan import', () => {
       assert.equal(r.error, null, `plan ${i + 1}`);
       assert.equal((await d.rpc('finish_ai_request', { request_id: r.data, reached_ai: true })).error, null);
     }
-    assert.equal((await d.rpc('start_ai_request', { kind: 'plan' })).error?.code, '54000');
+    // The daily limits are a project setting (private.ai_limits). A test project may turn them off;
+    // the exact limits are covered by test:db.
+    const sixth = await d.rpc('start_ai_request', { kind: 'plan' });
+    if (sixth.error) assert.equal(sixth.error.code, '54000');
+    else {
+      ctx.diagnostic('daily AI limits are turned off on this project');
+      await d.rpc('finish_ai_request', { request_id: sixth.data, reached_ai: true });
+    }
     // Task suggestions have their own limit.
     const t = await d.rpc('start_ai_request', { kind: 'task' });
     assert.equal(t.error, null);
