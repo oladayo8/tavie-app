@@ -1,13 +1,13 @@
 import { router } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/avatar';
 import { ProgramPicker } from '@/components/program-picker';
 import { Screen } from '@/components/screen';
 import { ErrorState, Loading } from '@/components/states';
 import { Colors, Fonts } from '@/constants/theme';
-import { ago, attentionLine, getDashboard, shortName, type StudentRow, type StudentStatus } from '@/lib/dashboard';
+import { ago, attentionLine, getDashboard, studentLabel, type StudentRow, type StudentStatus } from '@/lib/dashboard';
 import { useSelectedProgram } from '@/lib/selected-program';
 import { useLoad } from '@/lib/use-load';
 
@@ -63,23 +63,31 @@ export default function StudentsScreen() {
           ) : null}
           {data.students.length ? (
             <>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
+              {/* Two by two, so every filter is visible on a small phone without sideways scrolling. */}
+              <View style={styles.filters} accessibilityRole="tablist">
                 {FILTERS.map((f) => {
                   const on = f.key === filter;
                   return (
                     <Pressable
                       key={f.key}
-                      accessibilityRole="button"
+                      accessibilityRole="tab"
                       accessibilityState={{ selected: on }}
+                      accessibilityLabel={`${f.label}, ${count(f.key)}`}
                       onPress={() => setFilter(f.key)}
                       style={({ pressed }) => [styles.filter, on && styles.filterOn, pressed && styles.pressed]}>
-                      <Text maxFontSizeMultiplier={1.2} style={[styles.filterText, on && styles.filterTextOn]}>
-                        {f.label} ({count(f.key)})
+                      <Text
+                        maxFontSizeMultiplier={1.2}
+                        style={[styles.filterText, on && styles.filterTextOn]}
+                        numberOfLines={1}>
+                        {f.label}
+                      </Text>
+                      <Text maxFontSizeMultiplier={1.2} style={[styles.filterCount, on && styles.filterCountOn]}>
+                        {count(f.key)}
                       </Text>
                     </Pressable>
                   );
                 })}
-              </ScrollView>
+              </View>
               {shown.length ? (
                 shown.map((s) => (
                   <RosterRow
@@ -123,19 +131,27 @@ function RosterRow({ s, onPress }: { s: StudentRow; onPress: () => void }) {
         : 'Not started';
   const reason = attentionLine(s);
   const actions = s.check_ins ?? 0;
+  const label = studentLabel(s);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${shortName(s.name)}. ${reason ?? s.status}. ${where}. ${actions} check-ins. Last active ${ago(s.last_activity_at)}.`}
+      accessibilityLabel={`${label}. ${reason ?? s.status}. ${where}. ${actions} check-ins. Last active ${ago(s.last_activity_at)}.`}
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Avatar name={s.name} tone={tone} size={46} />
       <View style={styles.flex}>
         <View style={styles.nameRow}>
-          <Text maxFontSizeMultiplier={1.3} style={styles.name} numberOfLines={1}>
-            {shortName(s.name)}
+          <Text
+            maxFontSizeMultiplier={1.3}
+            style={styles.name}
+            numberOfLines={1}
+            ellipsizeMode={s.name ? 'tail' : 'middle'}>
+            {label}
           </Text>
           <View style={[styles.dot, { backgroundColor: dot }]} />
+          <Text maxFontSizeMultiplier={1.2} style={styles.time} numberOfLines={1}>
+            {ago(s.last_activity_at)}
+          </Text>
         </View>
         <Text maxFontSizeMultiplier={1.2} style={styles.where} numberOfLines={1}>
           {where}
@@ -144,17 +160,12 @@ function RosterRow({ s, onPress }: { s: StudentRow; onPress: () => void }) {
           <Text
             maxFontSizeMultiplier={1.3}
             style={[styles.reason, s.attention === 'blocker' && styles.red]}
-            numberOfLines={1}>
+            numberOfLines={2}>
             {reason}
           </Text>
         ) : null}
-      </View>
-      <View style={styles.right}>
         <Text maxFontSizeMultiplier={1.2} style={styles.actions}>
           {actions} {actions === 1 ? 'check-in' : 'check-ins'}
-        </Text>
-        <Text maxFontSizeMultiplier={1.2} style={styles.time}>
-          {ago(s.last_activity_at)}
         </Text>
       </View>
     </Pressable>
@@ -180,6 +191,7 @@ const styles = StyleSheet.create({
   },
   flex: {
     flex: 1,
+    minWidth: 0,
   },
   eyebrow: {
     fontFamily: Fonts.mono,
@@ -211,24 +223,44 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   filters: {
-    gap: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   filter: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
     paddingHorizontal: 14,
-    minHeight: 38,
-    justifyContent: 'center',
-    borderRadius: 999,
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.line,
   },
   filterOn: {
     backgroundColor: Colors.emerald,
+    borderColor: Colors.emerald,
   },
   filterText: {
+    flexShrink: 1,
     fontFamily: Fonts.bodySemiBold,
     fontSize: 14,
-    color: Colors.inkMuted,
+    color: Colors.ink,
   },
   filterTextOn: {
     color: Colors.white,
+  },
+  filterCount: {
+    fontFamily: Fonts.mono,
+    fontSize: 13,
+    color: Colors.inkMuted,
+  },
+  filterCountOn: {
+    color: Colors.mint,
   },
   pressed: {
     opacity: 0.75,
@@ -274,16 +306,16 @@ const styles = StyleSheet.create({
   red: {
     color: Colors.error,
   },
-  right: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
   actions: {
     fontFamily: Fonts.mono,
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.emerald,
+    paddingTop: 4,
   },
   time: {
+    flexShrink: 0,
+    marginLeft: 'auto',
+    paddingLeft: 8,
     fontFamily: Fonts.body,
     fontSize: 12,
     color: Colors.inkMuted,

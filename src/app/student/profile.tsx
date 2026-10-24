@@ -1,19 +1,25 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { NameEditor } from '@/components/name-editor';
 import { Screen } from '@/components/screen';
 import { Label } from '@/components/text';
 import { Colors, Fonts } from '@/constants/theme';
 import { signOut, useAuth } from '@/lib/auth';
+import { getProfile, type MyProfile } from '@/lib/profile';
 import { getPath } from '@/lib/student';
 import { useLoad } from '@/lib/use-load';
 
-/** The student's account: who they're signed in as, the program they joined, and Sign out. */
+/** The student's account: their name (editable), email, the program they joined, and Sign out. */
 export default function ProfileScreen() {
   const { session } = useAuth();
   const load = useCallback(() => getPath(), []);
   const { data } = useLoad(load);
+  const loadMe = useCallback(() => getProfile('student'), []);
+  const { data: loadedMe } = useLoad(loadMe);
+  const [saved, setSaved] = useState<MyProfile | null>(null);
+  const me = saved ?? loadedMe;
   const coach = data ? [data.creator.first_name, data.creator.last_name].filter(Boolean).join(' ') : null;
 
   return (
@@ -23,7 +29,8 @@ export default function ProfileScreen() {
       </Text>
       <View style={styles.content}>
         <View style={styles.card}>
-          <Item label="Signed in as" value={session?.user.email ?? '–'} />
+          {me ? <NameEditor role="student" profile={me} onSaved={setSaved} /> : null}
+          <Item label="Email" value={session?.user.email ?? '–'} divider={!!me} />
           {data ? (
             <>
               <Item label="Program" value={data.program.title} divider />

@@ -12,7 +12,11 @@ export function Screen({ children, footer, tab }: { children: ReactNode; footer?
   return (
     <SafeAreaView style={styles.safe} edges={tab ? ['top'] : ['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}>
           <View style={styles.column}>{children}</View>
         </ScrollView>
         {footer ? <View style={styles.footer}>{footer}</View> : null}

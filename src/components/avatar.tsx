@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icons';
 import { Colors, Fonts } from '@/constants/theme';
 import { initials } from '@/lib/dashboard';
 
@@ -12,19 +13,20 @@ const TONES: Record<Tone, { bg: string; fg: string }> = {
   quiet: { bg: '#F6EBD9', fg: '#8A5A12' },
 };
 
-/** A round badge with someone's initials. */
+/** A round badge with someone's initials, or a plain person icon when there's no name yet. */
 export function Avatar({
   name,
   tone = 'forest',
   size = 44,
   ring,
 }: {
-  name: string;
+  name: string | null;
   tone?: Tone;
   size?: number;
   ring?: boolean;
 }) {
   const t = TONES[tone];
+  const letters = initials(name);
   return (
     <View
       style={[
@@ -34,9 +36,13 @@ export function Avatar({
       ]}
       importantForAccessibility="no-hide-descendants"
       accessibilityElementsHidden>
-      <Text maxFontSizeMultiplier={1.1} style={[styles.text, { color: t.fg, fontSize: size * 0.36 }]}>
-        {initials(name)}
-      </Text>
+      {letters ? (
+        <Text maxFontSizeMultiplier={1.1} style={[styles.text, { color: t.fg, fontSize: size * 0.36 }]}>
+          {letters}
+        </Text>
+      ) : (
+        <Icon name="person" color={t.fg} size={size * 0.45} />
+      )}
     </View>
   );
 }

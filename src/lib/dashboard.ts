@@ -16,7 +16,8 @@ export type CheckInKind = 'complete' | 'progress' | 'not_yet' | 'stuck' | 'unstu
 
 export type StudentRow = {
   enrollment_id: string;
-  name: string;
+  /** The name the student gave, or null until they add it. Never made up from the email. */
+  name: string | null;
   email: string;
   status: StudentStatus;
   attention: Attention;
@@ -61,7 +62,8 @@ export type Dashboard = {
 export type RecentCheckIn = {
   id: number;
   enrollment_id: string;
-  name: string;
+  name: string | null;
+  email: string;
   kind: CheckInKind;
   value_number: number | null;
   unit: string | null;
@@ -208,17 +210,16 @@ export function resolvedLine(kind: CheckInKind | null): string | null {
   }
 }
 
-/** A short name for lists: their first name, or the part of their email before the @. */
-export function shortName(name: string): string {
-  return name.includes('@') ? name.split('@')[0] : name;
+/** How a student is shown: the name they gave, or their email as it is until they add one. */
+export function studentLabel(s: { name: string | null; email: string }): string {
+  return s.name?.trim() || s.email;
 }
 
-/** Up to two letters for an avatar: "jasmine.k" → "JK", "Daniel Gbenle" → "DG". */
-export function initials(name: string): string {
-  const parts = shortName(name)
-    .split(/[\s._-]+/)
-    .filter((p) => /[a-z0-9]/i.test(p));
-  const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] ?? '?').slice(0, 2);
+/** Up to two letters for an avatar: "Jasmine King" → "JK", "Priya" → "PR". Empty without a name. */
+export function initials(name: string | null | undefined): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].slice(0, 2);
   return letters.toUpperCase();
 }
 
@@ -231,8 +232,10 @@ export function trend(now: number, before: number): string | null {
 }
 
 /** One feed line: "jo logged 5 calls", "jo finished Watch the welcome lesson". */
-export function feedLine(c: Pick<RecentCheckIn, 'name' | 'kind' | 'value_number' | 'unit' | 'task_title'>): string {
-  const who = shortName(c.name);
+export function feedLine(
+  c: Pick<RecentCheckIn, 'name' | 'email' | 'kind' | 'value_number' | 'unit' | 'task_title'>,
+): string {
+  const who = studentLabel(c);
   switch (c.kind) {
     case 'progress':
       return `${who} logged ${c.value_number ?? 0} ${c.unit?.trim() || ''}`.trim();
@@ -247,16 +250,4 @@ export function feedLine(c: Pick<RecentCheckIn, 'name' | 'kind' | 'value_number'
     case 'skip':
       return `${who} skipped ${c.task_title}`;
   }
-}
-
-export async function getMyName(): Promise<{ first_name: string; last_name: string } | null> {
-  const { data: auth } = await db().auth.getUser();
-  if (!auth.user) return null;
-  const { data, error } = await db()
-    .from('creators')
-    .select('first_name, last_name')
-    .eq('id', auth.user.id)
-    .maybeSingle();
-  if (error) throw error;
-  return data;
 }

@@ -56,20 +56,20 @@ export function PathCard({ program: p, students }: { program: ProgramSummary; st
         {p.title}
       </Text>
 
-      {p.goal.trim() !== p.title.trim() ? (
+      <Text maxFontSizeMultiplier={1.3} style={styles.length}>
+        {p.duration_weeks}-week path
+      </Text>
+
+      {p.goal.trim() ? (
         <View style={styles.goal}>
           <Text maxFontSizeMultiplier={1.2} style={styles.goalLabel}>
             Core goal:
           </Text>
           <Text maxFontSizeMultiplier={1.3} style={styles.goalText}>
-            “{p.goal}”
+            “{p.goal.trim()}”
           </Text>
         </View>
-      ) : (
-        <Text maxFontSizeMultiplier={1.3} style={styles.length}>
-          {p.duration_weeks}-week path
-        </Text>
-      )}
+      ) : null}
 
       <View style={styles.stats}>
         <Stat value={p.milestoneCount} label={p.milestoneCount === 1 ? 'Milestone' : 'Milestones'} />

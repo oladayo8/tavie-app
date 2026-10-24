@@ -3,7 +3,7 @@ import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { Label } from '@/components/text';
 import { Colors, Fonts, MinTapTarget, Radius } from '@/constants/theme';
 
-type Props = TextInputProps & { label: string };
+type Props = TextInputProps & { label: string; ref?: React.Ref<React.ComponentRef<typeof TextInput>> };
 
 export function TextField({ label, style, ...props }: Props) {
   return (

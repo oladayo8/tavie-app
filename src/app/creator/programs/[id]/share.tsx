@@ -38,7 +38,7 @@ export default function ShareScreen() {
       <Screen>
         <TopBar parent={parent} />
         <View style={styles.content}>
-          <Headline>Publish first.</Headline>
+          <Headline size="compact">Publish first.</Headline>
           <Body muted>Your link starts working once the program is live.</Body>
         </View>
       </Screen>
@@ -69,7 +69,7 @@ export default function ShareScreen() {
       <TopBar parent={parent} />
       <View style={styles.content}>
         <Label style={styles.live}>Live</Label>
-        <Headline>Send this to your students.</Headline>
+        <Headline size="compact">Send this to your students.</Headline>
         <View style={styles.linkBox}>
           <Body style={styles.link} selectable>
             {link}

@@ -32,13 +32,16 @@ async function lookUpAccess(client: SupabaseClient, session: Session): Promise<A
   const uid = session.user.id;
   const [creator, student, arrival] = await Promise.all([
     client.from('creators').select('id').eq('id', uid).maybeSingle(),
-    client.from('students').select('id').eq('id', uid).maybeSingle(),
+    client.from('students').select('id, first_name').eq('id', uid).maybeSingle(),
     getArrival(),
   ]);
   if (creator.error) throw creator.error;
   if (student.error) throw student.error;
 
-  const { access, registerStudent } = resolveAccess({ isCreator: !!creator.data, isStudent: !!student.data }, arrival);
+  const { access, registerStudent } = resolveAccess(
+    { isCreator: !!creator.data, isStudent: !!student.data, studentHasName: !!student.data?.first_name?.trim() },
+    arrival,
+  );
   if (registerStudent) {
     const { error } = await client.rpc('register_student');
     if (error) throw error;

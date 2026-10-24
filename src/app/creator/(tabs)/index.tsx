@@ -8,18 +8,17 @@ import { ProgramPicker } from '@/components/program-picker';
 import { Screen } from '@/components/screen';
 import { ErrorState, Loading } from '@/components/states';
 import { Colors, Fonts } from '@/constants/theme';
-import { signOut } from '@/lib/auth';
 import {
   ago,
   attentionLine,
   feedLine,
   getDashboard,
-  getMyName,
-  shortName,
+  studentLabel,
   trend,
   type Dashboard,
   type StudentRow,
 } from '@/lib/dashboard';
+import { fullName, getProfile } from '@/lib/profile';
 import { useSelectedProgram } from '@/lib/selected-program';
 import { useLoad } from '@/lib/use-load';
 
@@ -31,7 +30,7 @@ import { useLoad } from '@/lib/use-load';
 export default function OverviewScreen() {
   const { programId, setProgramId } = useSelectedProgram();
   const load = useCallback(async () => {
-    const [dashboard, me] = await Promise.all([getDashboard(programId), getMyName()]);
+    const [dashboard, me] = await Promise.all([getDashboard(programId), getProfile('creator')]);
     return { dashboard, me };
   }, [programId]);
   const { data, loading, error, retry } = useLoad(load);
@@ -45,21 +44,32 @@ export default function OverviewScreen() {
   }
 
   const { dashboard, me } = data;
-  const myName = me ? [me.first_name, me.last_name].filter(Boolean).join(' ') : '';
+  const myName = fullName(me);
   const selected = dashboard.programs.find((p) => p.id === dashboard.program_id) ?? null;
 
   return (
     <Screen tab>
       <View style={styles.head}>
-        <Avatar name={myName || 'Tavie'} size={52} ring />
-        <View style={styles.flex}>
-          <Text maxFontSizeMultiplier={1.2} style={styles.headLabel} numberOfLines={1}>
-            {selected?.title ?? 'Tavie'}
-          </Text>
-          <Text maxFontSizeMultiplier={1.3} style={styles.headName} numberOfLines={1}>
-            {myName}
-          </Text>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Profile and settings"
+          onPress={() => router.push('/creator/profile')}
+          style={({ pressed }) => [styles.me, pressed && styles.pressed]}>
+          <View>
+            <Avatar name={myName} size={52} ring />
+            <View style={styles.gear}>
+              <Icon name="settings" color={Colors.forest} size={12} />
+            </View>
+          </View>
+          <View style={styles.flex}>
+            <Text maxFontSizeMultiplier={1.2} style={styles.headLabel} numberOfLines={1}>
+              {selected?.title ?? 'Tavie'}
+            </Text>
+            <Text maxFontSizeMultiplier={1.3} style={styles.headName} numberOfLines={1}>
+              {myName}
+            </Text>
+          </View>
+        </Pressable>
         {selected ? (
           <Pressable
             accessibilityRole="button"
@@ -92,12 +102,6 @@ export default function OverviewScreen() {
           <DarkButton title="Go to Execution Paths" onPress={() => router.navigate('/creator/programs')} />
         </View>
       )}
-
-      <Pressable accessibilityRole="button" onPress={signOut} style={styles.signOut} hitSlop={6}>
-        <Text maxFontSizeMultiplier={1.2} style={styles.signOutText}>
-          Sign out
-        </Text>
-      </Pressable>
     </Screen>
   );
 }
@@ -240,13 +244,13 @@ function AttentionRow({ s, onPress }: { s: StudentRow; onPress: () => void }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${shortName(s.name)}. ${attentionLine(s)}`}
+      accessibilityLabel={`${studentLabel(s)}. ${attentionLine(s)}`}
       onPress={onPress}
       style={({ pressed }) => [styles.attention, pressed && styles.pressed]}>
       <Avatar name={s.name} size={38} tone={blocker ? 'alert' : 'quiet'} />
       <View style={styles.flex}>
         <Text maxFontSizeMultiplier={1.3} style={styles.attentionName} numberOfLines={1}>
-          {shortName(s.name)}
+          {studentLabel(s)}
         </Text>
         <Text maxFontSizeMultiplier={1.3} style={[styles.attentionWhy, blocker && styles.red]} numberOfLines={2}>
           {attentionLine(s)}
@@ -307,8 +311,29 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingBottom: 16,
   },
+  me: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+  },
+  gear: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
   flex: {
     flex: 1,
+    minWidth: 0,
   },
   headLabel: {
     fontFamily: Fonts.mono,
@@ -549,15 +574,5 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.bodySemiBold,
     fontSize: 16,
     color: Colors.white,
-  },
-  signOut: {
-    alignSelf: 'center',
-    paddingVertical: 18,
-  },
-  signOutText: {
-    fontFamily: Fonts.bodyMedium,
-    fontSize: 14,
-    color: Colors.inkMuted,
-    textDecorationLine: 'underline',
   },
 });

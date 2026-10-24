@@ -8,7 +8,7 @@ import {
   initials,
   reportSummary,
   resolvedLine,
-  shortName,
+  studentLabel,
   trend,
 } from '@/lib/dashboard';
 
@@ -65,12 +65,14 @@ describe('reportSummary and resolvedLine', () => {
 });
 
 describe('names, trend, and feed lines', () => {
-  it('shortens emails and makes initials', () => {
-    expect(shortName('jasmine.k@gmail.com')).toBe('jasmine.k');
-    expect(shortName('Jo')).toBe('Jo');
-    expect(initials('jasmine.k@gmail.com')).toBe('JK');
+  it('uses the name the student gave and never makes one up from the email', () => {
+    expect(studentLabel({ name: 'Jasmine King', email: 'jk@gmail.com' })).toBe('Jasmine King');
+    expect(studentLabel({ name: null, email: 'jasmine.k@gmail.com' })).toBe('jasmine.k@gmail.com');
+    expect(studentLabel({ name: '  ', email: 'jo@x.com' })).toBe('jo@x.com');
     expect(initials('Daniel Gbenle')).toBe('DG');
-    expect(initials('tasha@x.com')).toBe('TA');
+    expect(initials('Mary Ann Lee')).toBe('ML');
+    expect(initials('Priya')).toBe('PR');
+    expect(initials(null)).toBe('');
   });
 
   it('compares the last 24 hours only when there is something to compare', () => {
@@ -82,13 +84,34 @@ describe('names, trend, and feed lines', () => {
 
   it('says what the student reported', () => {
     expect(
-      feedLine({ name: 'jo@x.com', kind: 'progress', value_number: 5, unit: 'calls', task_title: 'Call sellers' }),
-    ).toBe('jo logged 5 calls');
+      feedLine({
+        name: null,
+        email: 'jo@x.com',
+        kind: 'progress',
+        value_number: 5,
+        unit: 'calls',
+        task_title: 'Call sellers',
+      }),
+    ).toBe('jo@x.com logged 5 calls');
     expect(
-      feedLine({ name: 'Jo', kind: 'complete', value_number: null, unit: null, task_title: 'Watch the lesson' }),
+      feedLine({
+        name: 'Jo',
+        email: 'jo@x.com',
+        kind: 'complete',
+        value_number: null,
+        unit: null,
+        task_title: 'Watch the lesson',
+      }),
     ).toBe('Jo finished Watch the lesson');
-    expect(feedLine({ name: 'Jo', kind: 'stuck', value_number: null, unit: null, task_title: 'Call sellers' })).toBe(
-      'Jo is stuck on Call sellers',
-    );
+    expect(
+      feedLine({
+        name: 'Jo',
+        email: 'jo@x.com',
+        kind: 'stuck',
+        value_number: null,
+        unit: null,
+        task_title: 'Call sellers',
+      }),
+    ).toBe('Jo is stuck on Call sellers');
   });
 });

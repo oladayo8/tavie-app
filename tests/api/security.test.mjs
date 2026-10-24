@@ -791,6 +791,28 @@ describe('creator dashboard', () => {
     assert.ok(!JSON.stringify(d.recent).includes('The video will not load.'));
   });
 
+  test('students set their own name; the creator sees it and nobody else can change it', async () => {
+    const before = (await f.rpc('creator_dashboard', { program_id: null })).data;
+    const row = (d) => d.students.find((s) => s.enrollment_id === enr.going);
+    assert.equal(row(before).name, null);
+    const me = (await kid.going.auth.getUser()).data.user.id;
+    const upd = await kid.going
+      .from('students')
+      .update({ first_name: 'Gina', last_name: 'Oak' })
+      .eq('id', me)
+      .select('id');
+    assert.equal(upd.error, null);
+    assert.equal(upd.data.length, 1);
+    assert.equal((await kid.going.from('students').update({ first_name: ' ' }).eq('id', me)).error?.code, '23514');
+    const other = await kid.stuck.from('students').update({ first_name: 'X' }).eq('id', me).select('id');
+    assert.deepEqual(other.data, []);
+    const creator = await f.from('students').update({ first_name: 'X' }).eq('id', me).select('id');
+    assert.deepEqual(creator.data ?? [], []);
+    const after = (await f.rpc('creator_dashboard', { program_id: null })).data;
+    assert.equal(row(after).name, 'Gina Oak');
+    assert.ok(row(after).email.length > 0);
+  });
+
   test('student detail shows each check-in, the written note, and whether a blocker was resolved', async () => {
     const open = await f.rpc('creator_student', { enrollment_id: enr.stuck });
     assert.equal(open.error, null);

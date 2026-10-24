@@ -9,7 +9,7 @@
 - **AI plan generator** (#4, merged 2026-10-23): goal and existing course to a suggested plan the creator edits and approves; one-sentence task suggestions; advanced task fields behind "Edit details".
 - **Student Today** (#6): join link enrolls the student; Today shows the current task with check-ins, partial counts, stuck, and skip for optional tasks.
 - **Creator dashboard** (#7, open): counts, Needs attention (blockers, then 3+ days inactive), student list, a read-only student record with every check-in, and role-based bottom tabs (student: Today, My Path, Profile; creator: Overview, Students, Programs).
-- **Creator redesign** (open, follows Daniel's prototype): Execution Paths shows live and paused paths as cards (milestones, tasks, students, Edit Milestones, Copy Link, menu) with drafts on their own screen; Overview has a check-ins-in-24-hours card with trend and a latest check-ins feed; Students is a roster with filters. All numbers come from real check-ins. "Rules", "Deals closed" and Insights are left out because nothing records them.
+- **Creator redesign** (open, follows Daniel's prototype): Execution Paths shows live and paused paths as cards (milestones, tasks, students, Edit Milestones, Copy Link, menu) with drafts on their own screen; Overview has a check-ins-in-24-hours card with trend and a latest check-ins feed; Students is a roster with filters. All numbers come from real check-ins. "Rules", "Deals closed" and Insights are left out because nothing records them. Refinements after Daniel's iPhone test: student first and last names (required first name, existing students prompted), creator Profile and Settings (edit name, sign out), two-by-two roster filters, compact builder headings and reorder arrows, and the review-gate switch hidden until it's enforced.
 
 ## Key decisions
 - Progression is deterministic. AI only suggests builder content; it never publishes or decides completion, and nothing is saved until the creator approves.
@@ -24,4 +24,4 @@
 
 ## Next
 - Daniel tests the creator dashboard and the redesign on his iPhone and approves their PRs.
-- Not built yet: student onboarding questions and pacing (On track / Behind), milestone review gates, nudges, and creator overrides (resolve, waive, replace).
+- Not built yet: pacing (On track / Behind), milestone review gates (switch hidden), manual nudges, Resolve (only if needed; Waive and Replace deferred), and account deletion (needs Daniel's approval).

@@ -102,6 +102,11 @@ A blocker counts as resolved by the next report on that task that clears it in `
 out", logging progress, finishing, or skipping. Every answer is shown as reported by the student; Tavie doesn't
 verify it.
 
+Students give a required first name (and an optional last name) before anything else: new students right
+after sign-in, existing students the next time they open the app (`student-name` route, guarded by
+`student-needs-name` access). Creators see that name everywhere, with the email as secondary detail; a student
+who hasn't answered yet shows as their email, never a name guessed from it (`private.student_name`).
+
 `creator_dashboard` also returns each student's check-in total, the number of check-ins in the last 24 hours and
 the 24 hours before (the Overview card and its trend), and the six latest check-ins (the Overview feed). These are
 counts of what students reported, nothing more.

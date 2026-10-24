@@ -77,7 +77,7 @@ export default function MilestonesScreen() {
       <LiveEditNotice status={data.program.status} />
       <View style={styles.content}>
         <Label>Milestones</Label>
-        <Headline>What are the big stages on the way there?</Headline>
+        <Headline size="compact">What are the big stages on the way there?</Headline>
         <Body muted>Most paths have 4 to 10. Open one to add its tasks.</Body>
         {active.map((m, i) => {
           const count = data.tasks.filter((t) => t.milestone_id === m.id && !t.archived_at).length;
@@ -85,19 +85,21 @@ export default function MilestonesScreen() {
             <Row
               key={m.id}
               title={`${i + 1}. ${m.title}`}
-              detail={`${count} ${count === 1 ? 'task' : 'tasks'}${m.requires_review ? ' · You review before they move on' : ''}`}
+              detail={`${count} ${count === 1 ? 'task' : 'tasks'}`}
               warning={count ? undefined : 'Add at least one task'}
               onPress={() =>
                 router.push({ pathname: '/creator/programs/[id]/milestones/[mid]', params: { id, mid: m.id } })
               }
-              accessibilityLabel={`Open milestone ${m.title}`}>
-              <MoveButtons
-                name={m.title}
-                canUp={i > 0 && !busy}
-                canDown={i < active.length - 1 && !busy}
-                onMove={(delta) => onMove(i, delta)}
-              />
-            </Row>
+              accessibilityLabel={`Open milestone ${m.title}`}
+              trailing={
+                <MoveButtons
+                  name={m.title}
+                  canUp={i > 0 && !busy}
+                  canDown={i < active.length - 1 && !busy}
+                  onMove={(delta) => onMove(i, delta)}
+                />
+              }
+            />
           );
         })}
         <TextField

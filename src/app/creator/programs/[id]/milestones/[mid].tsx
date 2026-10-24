@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/button';
-import { MoveButtons, Row, SwitchRow } from '@/components/rows';
+import { MoveButtons, Row } from '@/components/rows';
 import { Screen } from '@/components/screen';
 import { ErrorState, ErrorText, Loading } from '@/components/states';
 import { Body, Headline, Label } from '@/components/text';
@@ -17,7 +17,10 @@ import { dataErrorMessage } from '@/lib/errors';
 import { LIMITS, moveId, REPORT_TYPES, taskWarnings } from '@/lib/program';
 import { useLoad } from '@/lib/use-load';
 
-/** One milestone: its name, the review switch, and its tasks in order. */
+/**
+ * One milestone: its name and its tasks in order. The "I review before students move on" switch is
+ * hidden until review gates are enforced, so the builder never offers something that doesn't work.
+ */
 export default function MilestoneScreen() {
   const { id, mid } = useLocalSearchParams<{ id: string; mid: string }>();
   const load = useCallback(() => loadProgram(id), [id]);
@@ -90,7 +93,7 @@ export default function MilestoneScreen() {
       <LiveEditNotice status={data.program.status} />
       <View style={styles.content}>
         <Label>Milestone {number}</Label>
-        <Headline>{milestone.title}</Headline>
+        <Headline size="compact">{milestone.title}</Headline>
         <TextField label="Name" value={titleText} onChangeText={setTitle} maxLength={LIMITS.milestoneTitle} />
         {titleChanged ? (
           <Button
@@ -101,11 +104,6 @@ export default function MilestoneScreen() {
             disabled={!titleText.trim()}
           />
         ) : null}
-        <SwitchRow
-          label="I review before students move on"
-          value={milestone.requires_review}
-          onValueChange={(value) => run(() => updateMilestone(mid, { requires_review: value }))}
-        />
 
         <Label style={styles.section}>Tasks</Label>
         {tasks.length === 0 ? <Body muted>No tasks yet. Add the first thing students should do.</Body> : null}
@@ -118,26 +116,28 @@ export default function MilestoneScreen() {
               detail={`${REPORT_TYPES.find((r) => r.type === t.completion_type)?.label} · ${t.est_minutes} min${t.is_optional ? ' · Optional' : ''}`}
               warning={warnings.length ? warnings.join(' · ') : undefined}
               onPress={() => openTask(t.id)}
-              accessibilityLabel={`Edit task ${t.title}`}>
-              <MoveButtons
-                name={t.title}
-                canUp={i > 0 && !busy}
-                canDown={i < tasks.length - 1 && !busy}
-                onMove={(delta) =>
-                  run(() =>
-                    reorderTasks(
-                      mid,
-                      moveId(
-                        tasks.map((x) => x.id),
-                        i,
-                        delta,
+              accessibilityLabel={`Edit task ${t.title}`}
+              trailing={
+                <MoveButtons
+                  name={t.title}
+                  canUp={i > 0 && !busy}
+                  canDown={i < tasks.length - 1 && !busy}
+                  onMove={(delta) =>
+                    run(() =>
+                      reorderTasks(
+                        mid,
+                        moveId(
+                          tasks.map((x) => x.id),
+                          i,
+                          delta,
+                        ),
+                        data.tasks,
                       ),
-                      data.tasks,
-                    ),
-                  )
-                }
-              />
-            </Row>
+                    )
+                  }
+                />
+              }
+            />
           );
         })}
         <ErrorText message={actionError} />

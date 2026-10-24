@@ -166,7 +166,9 @@ function Generator({ detail }: { detail: ProgramDetail }) {
       <Screen>
         <View style={styles.working} accessibilityLiveRegion="polite">
           <ActivityIndicator color={Colors.emerald} size="large" />
-          <Headline style={styles.center}>Tavie is writing your plan</Headline>
+          <Headline size="compact" style={styles.center}>
+            Tavie is writing your plan
+          </Headline>
           <Body muted style={styles.center}>
             This usually takes under a minute. Nothing is saved until you approve it.
           </Body>
@@ -187,7 +189,7 @@ function Generator({ detail }: { detail: ProgramDetail }) {
         <TopBar parent={parent} />
         <View style={styles.content}>
           <Label>Plan with Tavie</Label>
-          <Headline>Already have a course or mentorship plan?</Headline>
+          <Headline size="compact">Already have a course or mentorship plan?</Headline>
           <Body muted>
             Paste your outline, lesson list, or how you run your mentorship. Tavie turns it into steps your students act
             on. Leave it empty and Tavie suggests a starter plan for you to review.
@@ -222,7 +224,7 @@ function Generator({ detail }: { detail: ProgramDetail }) {
       <TopBar parent={parent} />
       <View style={styles.content}>
         <Label>Review your plan</Label>
-        <Headline>{program.goal}</Headline>
+        <Headline size="compact">{program.goal}</Headline>
         {isDraft ? (
           <View style={styles.banner} accessibilityRole="summary">
             <Label>Draft starter plan</Label>

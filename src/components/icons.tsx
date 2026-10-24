@@ -1,6 +1,17 @@
 import Svg, { Circle, Path } from 'react-native-svg';
 
-export type IconName = 'plus' | 'link' | 'edit' | 'dots' | 'users' | 'check' | 'alert' | 'share' | 'chevron';
+export type IconName =
+  | 'plus'
+  | 'link'
+  | 'edit'
+  | 'dots'
+  | 'users'
+  | 'check'
+  | 'alert'
+  | 'share'
+  | 'chevron'
+  | 'person'
+  | 'settings';
 
 /** Small line icons for buttons and labels, drawn the same on every platform. */
 export function Icon({ name, color, size = 18 }: { name: IconName; color: string; size?: number }) {
@@ -36,6 +47,19 @@ export function Icon({ name, color, size = 18 }: { name: IconName; color: string
           <Circle cx={9} cy={8.5} r={3.2} {...line} />
           <Path
             d="M3 19c.9-3 3.2-4.6 6-4.6s5.1 1.6 6 4.6M16 5.5a3.2 3.2 0 0 1 0 6M18 14.6c1.6.6 2.6 2 3 4.4"
+            {...line}
+          />
+        </>
+      ) : name === 'person' ? (
+        <>
+          <Circle cx={12} cy={8.5} r={3.6} {...line} />
+          <Path d="M5 20c1-3.6 3.8-5.6 7-5.6s6 2 7 5.6" {...line} />
+        </>
+      ) : name === 'settings' ? (
+        <>
+          <Circle cx={12} cy={12} r={3} {...line} />
+          <Path
+            d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"
             {...line}
           />
         </>

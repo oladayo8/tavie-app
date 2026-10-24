@@ -1496,10 +1496,47 @@ describe('creator dashboard', () => {
     );
   });
 
+  test('students name themselves; creators see that name and can never change it', async () => {
+    const kid = kids.done;
+    const id = enr[kid.email];
+    await invalid(as(kid, "update public.students set first_name = '   ' where id = $1", [kid.id]));
+    await invalid(as(kid, 'update public.students set last_name = $2 where id = $1', [kid.id, 'x'.repeat(61)]));
+    await denied(as(kid, "update public.students set email = 'me@example.com' where id = $1", [kid.id]));
+    // Another student and the creator match no row, so nothing changes.
+    assert.equal(
+      (await as(kids.going, "update public.students set first_name = 'X' where id = $1", [kid.id])).rowCount,
+      0,
+    );
+    assert.equal((await as(E, "update public.students set first_name = 'X' where id = $1", [kid.id])).rowCount, 0);
+
+    const set = (first, last) =>
+      as(kid, 'update public.students set first_name = $2, last_name = $3 where id = $1', [kid.id, first, last], {
+        commit: true,
+      });
+    try {
+      assert.equal((await set('Gina', 'Oak')).rowCount, 1);
+      let d = await dashboard(E);
+      assert.equal(row(d, kid).name, 'Gina Oak');
+      assert.equal(row(d, kid).email, 'done@example.com');
+      assert.equal(d.recent.find((r) => r.enrollment_id === id)?.name, 'Gina Oak');
+      const rec = (await as(E, 'select public.creator_student($1) as r', [id])).rows[0].r;
+      assert.equal(rec.name, 'Gina Oak');
+      assert.equal(rec.email, 'done@example.com');
+
+      await set('Gina', null);
+      d = await dashboard(E);
+      assert.equal(row(d, kid).name, 'Gina');
+    } finally {
+      await set(null, null);
+    }
+  });
+
   test('rows show the milestone, tasks done, partial counts, and the open blocker', async () => {
     const d = await dashboard(E);
     const going = row(d, kids.going);
-    assert.equal(going.name, 'going@example.com');
+    // No name given yet: the name is empty, never made up from the email.
+    assert.equal(going.name, null);
+    assert.equal(going.email, 'going@example.com');
     assert.deepEqual(going.progress, { done: 1, total: 3 });
     assert.deepEqual(going.milestone, { number: 1, count: 2, title: 'Get set up' });
     assert.equal(going.task.title, 'Call 10 sellers');
@@ -1674,7 +1711,8 @@ describe('creator dashboard', () => {
     // The quiet student's check-in is 4 days old, so it isn't in either window.
     assert.deepEqual(d.activity, { last_24h: 10, previous_24h: 0 });
     assert.equal(d.recent.length, 6);
-    assert.equal(d.recent[0].name, 'done@example.com');
+    assert.equal(d.recent[0].name, null);
+    assert.equal(d.recent[0].email, 'done@example.com');
     assert.equal(d.recent[0].kind, 'complete');
     assert.equal(d.recent[0].task_title, 'Write your offer script');
     const times = d.recent.map((r) => Date.parse(r.created_at));

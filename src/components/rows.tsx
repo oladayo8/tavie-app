@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
+import { Icon } from '@/components/icons';
 import { Body, Label } from '@/components/text';
 import { Colors, Fonts, MinTapTarget, Radius, Spacing } from '@/constants/theme';
 
-/** A white card row. Pressable when `onPress` is given. */
+/** A white card row. Pressable when `onPress` is given. `trailing` sits at the right edge (e.g. reorder arrows). */
 export function Row({
   title,
   detail,
@@ -12,6 +13,7 @@ export function Row({
   warning,
   onPress,
   accessibilityLabel,
+  trailing,
   children,
 }: {
   title: string;
@@ -20,9 +22,10 @@ export function Row({
   warning?: string;
   onPress?: () => void;
   accessibilityLabel?: string;
+  trailing?: ReactNode;
   children?: ReactNode;
 }) {
-  const content = (
+  const text = (
     <>
       <View style={styles.rowTop}>
         <Text style={styles.rowTitle}>{title}</Text>
@@ -32,6 +35,14 @@ export function Row({
       {warning ? <Body style={styles.warning}>⚠ {warning}</Body> : null}
       {children}
     </>
+  );
+  const content = trailing ? (
+    <View style={styles.withTrailing}>
+      <View style={styles.rowText}>{text}</View>
+      {trailing}
+    </View>
+  ) : (
+    text
   );
   if (!onPress) return <View style={styles.row}>{content}</View>;
   return (
@@ -104,7 +115,7 @@ export function Choices<T extends string>({
   );
 }
 
-/** Up and down buttons for reordering. */
+/** Small up and down arrows for reordering, stacked at the right edge of a row. */
 export function MoveButtons({
   name,
   canUp,
@@ -118,9 +129,36 @@ export function MoveButtons({
 }) {
   return (
     <View style={styles.move}>
-      <SmallButton label="↑" accessibilityLabel={`Move ${name} up`} disabled={!canUp} onPress={() => onMove(-1)} />
-      <SmallButton label="↓" accessibilityLabel={`Move ${name} down`} disabled={!canDown} onPress={() => onMove(1)} />
+      <Arrow up label={`Move ${name} up`} disabled={!canUp} onPress={() => onMove(-1)} />
+      <Arrow label={`Move ${name} down`} disabled={!canDown} onPress={() => onMove(1)} />
     </View>
+  );
+}
+
+function Arrow({
+  up,
+  label,
+  disabled,
+  onPress,
+}: {
+  up?: boolean;
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      hitSlop={{ left: 8, right: 8 }}
+      style={({ pressed }) => [styles.arrow, pressed && styles.pressed, disabled && styles.disabled]}>
+      <View style={{ transform: [{ rotate: up ? '-90deg' : '90deg' }] }}>
+        <Icon name="chevron" color={Colors.forest} size={16} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -225,9 +263,28 @@ const styles = StyleSheet.create({
     borderColor: Colors.emerald,
     backgroundColor: Colors.emerald,
   },
-  move: {
+  withTrailing: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  rowText: {
+    flex: 1,
+    minWidth: 0,
+    gap: Spacing.one,
+  },
+  move: {
+    gap: 6,
+  },
+  arrow: {
+    width: 40,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: Colors.paper,
+    borderWidth: 1,
+    borderColor: Colors.line,
   },
   small: {
     minWidth: 44,
