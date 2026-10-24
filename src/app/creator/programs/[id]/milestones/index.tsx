@@ -8,6 +8,7 @@ import { Screen } from '@/components/screen';
 import { ErrorState, ErrorText, Loading } from '@/components/states';
 import { Body, Headline, Label } from '@/components/text';
 import { TextField } from '@/components/text-field';
+import { LiveEditNotice } from '@/components/live-edit-notice';
 import { goBackOr, TopBar } from '@/components/top-bar';
 import { Spacing } from '@/constants/theme';
 import { addMilestone, loadProgram, reorderMilestones } from '@/lib/builder';
@@ -73,6 +74,7 @@ export default function MilestonesScreen() {
     <Screen
       footer={<Button title="Done" onPress={() => goBackOr({ pathname: '/creator/programs/[id]', params: { id } })} />}>
       <TopBar parent={{ pathname: '/creator/programs/[id]', params: { id } }} />
+      <LiveEditNotice status={data.program.status} />
       <View style={styles.content}>
         <Label>Milestones</Label>
         <Headline>What are the big stages on the way there?</Headline>

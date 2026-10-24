@@ -8,6 +8,7 @@ import { Screen } from '@/components/screen';
 import { ErrorState, ErrorText, Loading } from '@/components/states';
 import { Body, Headline, Label } from '@/components/text';
 import { TextField } from '@/components/text-field';
+import { LiveEditNotice } from '@/components/live-edit-notice';
 import { goBackOr, TopBar } from '@/components/top-bar';
 import { Spacing } from '@/constants/theme';
 import { loadProgram, reorderTasks, updateMilestone } from '@/lib/builder';
@@ -86,6 +87,7 @@ export default function MilestoneScreen() {
   return (
     <Screen footer={<Button title="Add task" onPress={() => openTask('new')} />}>
       <TopBar parent={parent} label="Milestones" />
+      <LiveEditNotice status={data.program.status} />
       <View style={styles.content}>
         <Label>Milestone {number}</Label>
         <Headline>{milestone.title}</Headline>

@@ -1,6 +1,16 @@
 import { describe, expect, it, jest } from '@jest/globals';
 
-import { ago, attentionLine, daysSince, reportSummary, resolvedLine } from '@/lib/dashboard';
+import {
+  ago,
+  attentionLine,
+  daysSince,
+  feedLine,
+  initials,
+  reportSummary,
+  resolvedLine,
+  shortName,
+  trend,
+} from '@/lib/dashboard';
 
 jest.mock('@/lib/supabase', () => ({ supabase: null }));
 
@@ -51,5 +61,34 @@ describe('reportSummary and resolvedLine', () => {
     expect(reportSummary({ kind: 'stuck', value_number: null, unit: null })).toBe('Reported stuck');
     expect(resolvedLine('unstuck')).toBe('They said they figured it out');
     expect(resolvedLine(null)).toBeNull();
+  });
+});
+
+describe('names, trend, and feed lines', () => {
+  it('shortens emails and makes initials', () => {
+    expect(shortName('jasmine.k@gmail.com')).toBe('jasmine.k');
+    expect(shortName('Jo')).toBe('Jo');
+    expect(initials('jasmine.k@gmail.com')).toBe('JK');
+    expect(initials('Daniel Gbenle')).toBe('DG');
+    expect(initials('tasha@x.com')).toBe('TA');
+  });
+
+  it('compares the last 24 hours only when there is something to compare', () => {
+    expect(trend(142, 120)).toBe('+18% vs previous 24 h');
+    expect(trend(5, 10)).toBe('-50% vs previous 24 h');
+    expect(trend(3, 3)).toBe('Same as previous 24 h');
+    expect(trend(4, 0)).toBeNull();
+  });
+
+  it('says what the student reported', () => {
+    expect(
+      feedLine({ name: 'jo@x.com', kind: 'progress', value_number: 5, unit: 'calls', task_title: 'Call sellers' }),
+    ).toBe('jo logged 5 calls');
+    expect(
+      feedLine({ name: 'Jo', kind: 'complete', value_number: null, unit: null, task_title: 'Watch the lesson' }),
+    ).toBe('Jo finished Watch the lesson');
+    expect(feedLine({ name: 'Jo', kind: 'stuck', value_number: null, unit: null, task_title: 'Call sellers' })).toBe(
+      'Jo is stuck on Call sellers',
+    );
   });
 });

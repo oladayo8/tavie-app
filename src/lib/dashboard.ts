@@ -35,6 +35,8 @@ export type StudentRow = {
     count_so_far: number;
   } | null;
   blocker: { reason: string; note: string | null; reported_at: string } | null;
+  /** Every report they've made in this program. */
+  check_ins?: number;
   last_check_in: {
     kind: CheckInKind;
     value_number: number | null;
@@ -50,6 +52,21 @@ export type Dashboard = {
   inactive_days?: number;
   counts: { enrolled: number; progressing: number; needs_attention: number; completed: number } | null;
   students: StudentRow[];
+  /** Check-ins in rolling 24-hour windows. */
+  activity?: { last_24h: number; previous_24h: number };
+  /** The six latest check-ins in the program, newest first. */
+  recent?: RecentCheckIn[];
+};
+
+export type RecentCheckIn = {
+  id: number;
+  enrollment_id: string;
+  name: string;
+  kind: CheckInKind;
+  value_number: number | null;
+  unit: string | null;
+  task_title: string;
+  created_at: string;
 };
 
 export type PathTask = {
@@ -189,4 +206,57 @@ export function resolvedLine(kind: CheckInKind | null): string | null {
     default:
       return null;
   }
+}
+
+/** A short name for lists: their first name, or the part of their email before the @. */
+export function shortName(name: string): string {
+  return name.includes('@') ? name.split('@')[0] : name;
+}
+
+/** Up to two letters for an avatar: "jasmine.k" → "JK", "Daniel Gbenle" → "DG". */
+export function initials(name: string): string {
+  const parts = shortName(name)
+    .split(/[\s._-]+/)
+    .filter((p) => /[a-z0-9]/i.test(p));
+  const letters = parts.length > 1 ? parts[0][0] + parts[1][0] : (parts[0] ?? '?').slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/** "+18% vs previous 24 h", "Same as previous 24 h", or null when there's nothing to compare. */
+export function trend(now: number, before: number): string | null {
+  if (!before) return null;
+  const change = Math.round(((now - before) / before) * 100);
+  if (change === 0) return 'Same as previous 24 h';
+  return `${change > 0 ? '+' : ''}${change}% vs previous 24 h`;
+}
+
+/** One feed line: "jo logged 5 calls", "jo finished Watch the welcome lesson". */
+export function feedLine(c: Pick<RecentCheckIn, 'name' | 'kind' | 'value_number' | 'unit' | 'task_title'>): string {
+  const who = shortName(c.name);
+  switch (c.kind) {
+    case 'progress':
+      return `${who} logged ${c.value_number ?? 0} ${c.unit?.trim() || ''}`.trim();
+    case 'complete':
+      return `${who} finished ${c.task_title}`;
+    case 'not_yet':
+      return `${who} said not yet on ${c.task_title}`;
+    case 'stuck':
+      return `${who} is stuck on ${c.task_title}`;
+    case 'unstuck':
+      return `${who} got unstuck on ${c.task_title}`;
+    case 'skip':
+      return `${who} skipped ${c.task_title}`;
+  }
+}
+
+export async function getMyName(): Promise<{ first_name: string; last_name: string } | null> {
+  const { data: auth } = await db().auth.getUser();
+  if (!auth.user) return null;
+  const { data, error } = await db()
+    .from('creators')
+    .select('first_name, last_name')
+    .eq('id', auth.user.id)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }

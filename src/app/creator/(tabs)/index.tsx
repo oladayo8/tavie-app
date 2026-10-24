@@ -2,348 +2,512 @@ import { router } from 'expo-router';
 import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { Button } from '@/components/button';
+import { Avatar } from '@/components/avatar';
+import { Icon } from '@/components/icons';
 import { ProgramPicker } from '@/components/program-picker';
 import { Screen } from '@/components/screen';
 import { ErrorState, Loading } from '@/components/states';
-import { Body, Label } from '@/components/text';
-import { Wordmark } from '@/components/wordmark';
 import { Colors, Fonts } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
-import { attentionLine, getDashboard, type Dashboard } from '@/lib/dashboard';
+import {
+  ago,
+  attentionLine,
+  feedLine,
+  getDashboard,
+  getMyName,
+  shortName,
+  trend,
+  type Dashboard,
+  type StudentRow,
+} from '@/lib/dashboard';
 import { useSelectedProgram } from '@/lib/selected-program';
 import { useLoad } from '@/lib/use-load';
 
 /**
- * Overview tab, the creator's home: for the selected published program, four counts and who
- * needs help (blockers first, then inactive). The full list is on the Students tab.
+ * Overview tab, the creator's home. Who needs help comes first, then how the program is moving:
+ * check-ins in the last 24 hours, progressing vs needs attention, and the latest reports. Every
+ * number is counted from what students reported.
  */
 export default function OverviewScreen() {
   const { programId, setProgramId } = useSelectedProgram();
-  const load = useCallback(() => getDashboard(programId), [programId]);
-  const { data: dashboard, loading, error, retry } = useLoad(load);
+  const load = useCallback(async () => {
+    const [dashboard, me] = await Promise.all([getDashboard(programId), getMyName()]);
+    return { dashboard, me };
+  }, [programId]);
+  const { data, loading, error, retry } = useLoad(load);
 
-  const header = (
-    <View style={styles.bar}>
-      <Wordmark size={24} />
-      <Pressable
-        accessibilityRole="button"
-        onPress={signOut}
-        hitSlop={8}
-        style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
-        <Text maxFontSizeMultiplier={1.3} style={styles.signOutText}>
-          Sign out
-        </Text>
-      </Pressable>
-    </View>
-  );
-
-  if (!dashboard) {
+  if (!data) {
     return (
       <Screen tab>
-        {header}
-        {error ? <ErrorState message={error} onRetry={retry} /> : <Loading />}
+        {error ? <ErrorState message={error} onRetry={retry} /> : <Loading label="Loading overview" />}
       </Screen>
     );
   }
 
+  const { dashboard, me } = data;
+  const myName = me ? [me.first_name, me.last_name].filter(Boolean).join(' ') : '';
   const selected = dashboard.programs.find((p) => p.id === dashboard.program_id) ?? null;
 
   return (
     <Screen tab>
-      {header}
-      {selected ? (
-        <View style={styles.dashboard}>
-          {dashboard.programs.length > 1 ? (
-            <ProgramPicker
-              programs={dashboard.programs}
-              selected={selected.id}
-              onSelect={(id) => setProgramId(id)}
-              busy={loading}
-            />
-          ) : null}
-          <View style={styles.titleBlock}>
-            <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={styles.title} numberOfLines={2}>
-              {selected.title}
-            </Text>
-            <Text maxFontSizeMultiplier={1.3} style={styles.subtitle}>
-              {selected.status === 'paused' ? 'Paused' : 'Live'} · {selected.enrolled}{' '}
-              {selected.enrolled === 1 ? 'student' : 'students'}
-            </Text>
-          </View>
-          <Students dashboard={dashboard} programId={selected.id} />
+      <View style={styles.head}>
+        <Avatar name={myName || 'Tavie'} size={52} ring />
+        <View style={styles.flex}>
+          <Text maxFontSizeMultiplier={1.2} style={styles.headLabel} numberOfLines={1}>
+            {selected?.title ?? 'Tavie'}
+          </Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.headName} numberOfLines={1}>
+            {myName}
+          </Text>
         </View>
+        {selected ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push({ pathname: '/creator/programs/[id]/share', params: { id: selected.id } })}
+            style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
+            <Icon name="share" color={Colors.emerald} size={15} />
+            <Text maxFontSizeMultiplier={1.2} style={styles.shareText}>
+              Share Link
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+
+      {selected && dashboard.programs.length > 1 ? (
+        <View style={styles.picker}>
+          <ProgramPicker programs={dashboard.programs} selected={selected.id} onSelect={setProgramId} busy={loading} />
+        </View>
+      ) : null}
+
+      {selected ? (
+        <Program dashboard={dashboard} programId={selected.id} />
       ) : (
-        <View style={[styles.card, styles.firstCard]}>
+        <View style={styles.card}>
           <Text maxFontSizeMultiplier={1.3} style={styles.cardTitle}>
             Your students will show up here.
           </Text>
-          <Body muted style={styles.small}>
-            Build and publish a program, then share its link. You’ll see who joined and who needs help.
-          </Body>
-          <Button title="Go to Programs" onPress={() => router.navigate('/creator/programs')} />
+          <Text maxFontSizeMultiplier={1.3} style={styles.muted}>
+            Build and publish a path, then share its link. You’ll see who joined, what they did, and who needs you.
+          </Text>
+          <DarkButton title="Go to Execution Paths" onPress={() => router.navigate('/creator/programs')} />
         </View>
       )}
+
+      <Pressable accessibilityRole="button" onPress={signOut} style={styles.signOut} hitSlop={6}>
+        <Text maxFontSizeMultiplier={1.2} style={styles.signOutText}>
+          Sign out
+        </Text>
+      </Pressable>
     </Screen>
   );
 }
 
-function Students({ dashboard, programId }: { dashboard: Dashboard; programId: string }) {
+function Program({ dashboard, programId }: { dashboard: Dashboard; programId: string }) {
   const counts = dashboard.counts!;
   const attention = dashboard.students.filter((s) => s.status === 'needs_attention');
+  const activity = dashboard.activity ?? { last_24h: 0, previous_24h: 0 };
+  const change = trend(activity.last_24h, activity.previous_24h);
+  const active = counts.enrolled - counts.completed;
+  const pct = (n: number) => (active ? Math.round((n / active) * 100) : 0);
   const open = (id: string) => router.push({ pathname: '/creator/students/[id]', params: { id } });
 
-  if (!counts.enrolled) {
-    return (
-      <View style={styles.card}>
-        <Text maxFontSizeMultiplier={1.3} style={styles.cardTitle}>
-          No one has joined yet.
-        </Text>
-        <Body muted style={styles.small}>
-          Send your link to your students. They’ll show up here as soon as they join.
-        </Body>
-        <Button
-          variant="secondary"
-          title="Share your link"
-          onPress={() => router.push({ pathname: '/creator/programs/[id]/share', params: { id: programId } })}
-        />
-      </View>
-    );
-  }
-
   return (
-    <>
-      <View style={styles.stats}>
-        <Stat label="Enrolled" value={counts.enrolled} />
-        <Stat label="Progressing" value={counts.progressing} />
-        <Stat label="Needs attention" value={counts.needs_attention} alert={counts.needs_attention > 0} />
-        <Stat label="Completed" value={counts.completed} />
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <Label style={attention.length ? styles.alertLabel : undefined}>Needs attention</Label>
-          {attention.length ? <Label>{attention.length}</Label> : null}
+    <View style={styles.content}>
+      <View style={styles.hero} accessible accessibilityLabel={`${activity.last_24h} check-ins in the last 24 hours`}>
+        <Text maxFontSizeMultiplier={1.2} style={styles.heroLabel}>
+          Check-ins · last 24 h
+        </Text>
+        <View style={styles.heroRow}>
+          <Text maxFontSizeMultiplier={1.1} style={styles.heroNumber}>
+            {activity.last_24h}
+          </Text>
+          {change ? (
+            <Text maxFontSizeMultiplier={1.2} style={styles.heroChange}>
+              {change}
+            </Text>
+          ) : null}
         </View>
-        {attention.length ? (
-          <View style={styles.list}>
-            {attention.map((s) => (
-              <Pressable
-                key={s.enrollment_id}
-                accessibilityRole="button"
-                accessibilityLabel={`${s.name}. ${attentionLine(s)}`}
-                onPress={() => open(s.enrollment_id)}
-                style={({ pressed }) => [
-                  styles.attention,
-                  s.attention === 'blocker' ? styles.blocker : styles.inactive,
-                  pressed && styles.pressed,
-                ]}>
-                <View style={styles.attentionTop}>
-                  <Text maxFontSizeMultiplier={1.3} style={styles.name} numberOfLines={1}>
-                    {s.name}
-                  </Text>
-                  <Text
-                    maxFontSizeMultiplier={1.2}
-                    style={[styles.kind, s.attention === 'blocker' && styles.reasonBlocker]}>
-                    {s.attention === 'blocker' ? 'Blocker' : 'Inactive'}
-                  </Text>
-                </View>
-                <Text
-                  maxFontSizeMultiplier={1.3}
-                  style={[styles.reason, s.attention === 'blocker' && styles.reasonBlocker]}
-                  numberOfLines={1}>
-                  {attentionLine(s)}
-                </Text>
-                {s.attention === 'blocker' && s.blocker?.note ? (
-                  <Text maxFontSizeMultiplier={1.3} style={styles.note} numberOfLines={2}>
-                    “{s.blocker.note}”
-                  </Text>
-                ) : null}
-                {s.task ? (
-                  <Text maxFontSizeMultiplier={1.3} style={styles.meta} numberOfLines={1}>
-                    On: {s.task.title}
-                  </Text>
-                ) : null}
-              </Pressable>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.allClear}>
-            <Text maxFontSizeMultiplier={1.3} style={styles.allClearText}>
-              ✓ No one needs you right now.
+        <View style={styles.heroRule} />
+        <View style={styles.heroFoot}>
+          <View style={styles.heroStat}>
+            <Icon name="users" color={Colors.mint} size={17} />
+            <Text maxFontSizeMultiplier={1.2} style={styles.heroFootText}>
+              {counts.enrolled} {counts.enrolled === 1 ? 'student' : 'students'}
             </Text>
           </View>
-        )}
+          <Text maxFontSizeMultiplier={1.2} style={styles.heroDone}>
+            {counts.completed} completed
+          </Text>
+        </View>
       </View>
 
-      <Button
-        variant="secondary"
-        title={`See all ${counts.enrolled} ${counts.enrolled === 1 ? 'student' : 'students'}`}
-        onPress={() => router.navigate('/creator/students')}
-        style={styles.seeAll}
-      />
-    </>
+      {counts.enrolled ? (
+        <>
+          <View style={styles.tiles}>
+            <Tile
+              icon="check"
+              color={Colors.emerald}
+              label="On track"
+              value={counts.progressing}
+              pct={pct(counts.progressing)}
+            />
+            <Tile
+              icon="alert"
+              color={counts.needs_attention ? Colors.error : Colors.inkMuted}
+              label="Needs attention"
+              value={counts.needs_attention}
+              pct={pct(counts.needs_attention)}
+            />
+          </View>
+
+          {attention.length ? (
+            <View style={styles.card}>
+              <View style={styles.cardHead}>
+                <Text maxFontSizeMultiplier={1.3} style={styles.cardTitle}>
+                  Needs you
+                </Text>
+                <Text maxFontSizeMultiplier={1.2} style={styles.alertPill}>
+                  {attention.length}
+                </Text>
+              </View>
+              {attention.map((s) => (
+                <AttentionRow key={s.enrollment_id} s={s} onPress={() => open(s.enrollment_id)} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.allClear}>
+              <Icon name="check" color={Colors.emerald} size={18} />
+              <Text maxFontSizeMultiplier={1.3} style={styles.allClearText}>
+                No one needs you right now.
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.card}>
+            <View style={styles.cardHead}>
+              <Text maxFontSizeMultiplier={1.3} style={styles.cardTitle}>
+                Latest check-ins
+              </Text>
+              <Text maxFontSizeMultiplier={1.2} style={styles.latestPill}>
+                Reported
+              </Text>
+            </View>
+            {dashboard.recent?.length ? (
+              dashboard.recent.map((c) => (
+                <Pressable
+                  key={c.id}
+                  accessibilityRole="button"
+                  onPress={() => open(c.enrollment_id)}
+                  style={({ pressed }) => [styles.feedRow, pressed && styles.pressed]}>
+                  <Avatar name={c.name} size={34} tone={c.kind === 'stuck' ? 'alert' : 'forest'} />
+                  <Text maxFontSizeMultiplier={1.3} style={styles.feedText} numberOfLines={2}>
+                    {feedLine(c)}
+                  </Text>
+                  <Text maxFontSizeMultiplier={1.2} style={styles.feedTime}>
+                    {ago(c.created_at)}
+                  </Text>
+                </Pressable>
+              ))
+            ) : (
+              <Text maxFontSizeMultiplier={1.3} style={styles.muted}>
+                No check-ins yet. They’ll appear here as students report.
+              </Text>
+            )}
+          </View>
+        </>
+      ) : (
+        <View style={styles.card}>
+          <Text maxFontSizeMultiplier={1.3} style={styles.cardTitle}>
+            No one has joined yet.
+          </Text>
+          <Text maxFontSizeMultiplier={1.3} style={styles.muted}>
+            Send your link to your students. They’ll show up here as soon as they join.
+          </Text>
+          <DarkButton
+            title="Share your link"
+            onPress={() => router.push({ pathname: '/creator/programs/[id]/share', params: { id: programId } })}
+          />
+        </View>
+      )}
+
+      <DarkButton title="Create New Program Path" icon onPress={() => router.push('/creator/new')} />
+    </View>
   );
 }
 
-function Stat({ label, value, alert }: { label: string; value: number; alert?: boolean }) {
+function AttentionRow({ s, onPress }: { s: StudentRow; onPress: () => void }) {
+  const blocker = s.attention === 'blocker';
   return (
-    <View style={[styles.stat, alert && styles.statAlert]} accessible accessibilityLabel={`${value} ${label}`}>
-      <Text maxFontSizeMultiplier={1.2} style={[styles.statValue, alert && styles.statValueAlert]}>
-        {value}
-      </Text>
-      <Text maxFontSizeMultiplier={1.2} style={styles.statLabel} numberOfLines={2}>
-        {label}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${shortName(s.name)}. ${attentionLine(s)}`}
+      onPress={onPress}
+      style={({ pressed }) => [styles.attention, pressed && styles.pressed]}>
+      <Avatar name={s.name} size={38} tone={blocker ? 'alert' : 'quiet'} />
+      <View style={styles.flex}>
+        <Text maxFontSizeMultiplier={1.3} style={styles.attentionName} numberOfLines={1}>
+          {shortName(s.name)}
+        </Text>
+        <Text maxFontSizeMultiplier={1.3} style={[styles.attentionWhy, blocker && styles.red]} numberOfLines={2}>
+          {attentionLine(s)}
+          {blocker && s.blocker?.note ? ` · “${s.blocker.note}”` : ''}
+        </Text>
+      </View>
+      <Icon name="chevron" color={Colors.inkMuted} size={14} />
+    </Pressable>
+  );
+}
+
+function Tile({
+  icon,
+  color,
+  label,
+  value,
+  pct,
+}: {
+  icon: 'check' | 'alert';
+  color: string;
+  label: string;
+  value: number;
+  pct: number;
+}) {
+  return (
+    <View style={styles.tile} accessible accessibilityLabel={`${label}: ${value}, ${pct} percent`}>
+      <View style={styles.tileHead}>
+        <Icon name={icon} color={color} size={18} />
+        <Text maxFontSizeMultiplier={1.2} style={[styles.tileLabel, { color }]} numberOfLines={2}>
+          {label}
+        </Text>
+      </View>
+      <Text maxFontSizeMultiplier={1.2} style={styles.tileValue}>
+        {value} <Text style={styles.tilePct}>({pct}%)</Text>
       </Text>
     </View>
   );
 }
 
+function DarkButton({ title, onPress, icon }: { title: string; onPress: () => void; icon?: boolean }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.dark, pressed && styles.pressed]}>
+      {icon ? <Icon name="plus" color={Colors.white} size={17} /> : null}
+      <Text maxFontSizeMultiplier={1.2} style={styles.darkText}>
+        {title}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  bar: {
+  head: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 12,
+    paddingBottom: 16,
   },
-  signOut: {
-    minHeight: 36,
-    justifyContent: 'center',
+  flex: {
+    flex: 1,
   },
-  signOutText: {
-    fontFamily: Fonts.bodyMedium,
-    fontSize: 14,
+  headLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
     color: Colors.inkMuted,
+  },
+  headName: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 18,
+    color: Colors.ink,
+  },
+  share: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    minHeight: 40,
+    borderRadius: 999,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  shareText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 14,
+    color: Colors.ink,
   },
   pressed: {
-    opacity: 0.7,
+    opacity: 0.75,
   },
-  dashboard: {
-    gap: 16,
-    paddingTop: 20,
+  picker: {
+    paddingBottom: 14,
   },
-  titleBlock: {
-    gap: 2,
+  content: {
+    gap: 14,
   },
-  title: {
+  hero: {
+    padding: 22,
+    borderRadius: 24,
+    backgroundColor: Colors.forest,
+    gap: 6,
+  },
+  heroLabel: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    letterSpacing: 1.6,
+    textTransform: 'uppercase',
+    color: Colors.mint,
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    columnGap: 12,
+  },
+  heroNumber: {
     fontFamily: Fonts.display,
-    fontSize: 22,
-    lineHeight: 26,
-    letterSpacing: -0.4,
-    color: Colors.ink,
+    fontSize: 60,
+    lineHeight: 66,
+    letterSpacing: -1.5,
+    color: Colors.mint,
   },
-  subtitle: {
+  heroChange: {
     fontFamily: Fonts.body,
-    fontSize: 14,
-    color: Colors.inkMuted,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
   },
-  stats: {
+  heroRule: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    marginVertical: 8,
+  },
+  heroFoot: {
     flexDirection: 'row',
-    gap: 8,
-  },
-  stat: {
-    flex: 1,
-    minHeight: 76,
-    justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderRadius: 14,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.line,
     alignItems: 'center',
-    gap: 2,
-  },
-  statAlert: {
-    borderColor: Colors.error,
-    backgroundColor: '#FDF3F2',
-  },
-  statValue: {
-    fontFamily: Fonts.display,
-    fontSize: 24,
-    lineHeight: 28,
-    color: Colors.ink,
-  },
-  statValueAlert: {
-    color: Colors.error,
-  },
-  statLabel: {
-    fontFamily: Fonts.mono,
-    fontSize: 9,
-    lineHeight: 12,
-    textAlign: 'center',
-    textTransform: 'uppercase',
-    color: Colors.inkMuted,
-  },
-  kind: {
-    fontFamily: Fonts.mono,
-    fontSize: 10,
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    color: Colors.ink,
-  },
-  section: {
-    gap: 10,
-    paddingTop: 20,
-  },
-  sectionHead: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  alertLabel: {
-    color: Colors.error,
-  },
-  list: {
-    gap: 8,
-  },
-  attention: {
-    gap: 4,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderLeftWidth: 4,
-  },
-  blocker: {
-    borderColor: Colors.line,
-    borderLeftColor: Colors.error,
-  },
-  inactive: {
-    borderColor: Colors.line,
-    borderLeftColor: Colors.ink,
-  },
-  attentionTop: {
+  heroStat: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  name: {
-    flex: 1,
+  heroFootText: {
+    fontFamily: Fonts.body,
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  heroDone: {
     fontFamily: Fonts.bodySemiBold,
-    fontSize: 16,
-    color: Colors.ink,
+    fontSize: 15,
+    color: Colors.mint,
   },
-  reason: {
-    fontFamily: Fonts.bodyMedium,
+  tiles: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  tile: {
+    flex: 1,
+    justifyContent: 'space-between',
+    gap: 8,
+    padding: 14,
+    borderRadius: 22,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  tileHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tileLabel: {
+    flexShrink: 1,
+    fontFamily: Fonts.bodySemiBold,
     fontSize: 14,
+  },
+  tileValue: {
+    fontFamily: Fonts.display,
+    fontSize: 28,
+    lineHeight: 32,
     color: Colors.ink,
   },
-  reasonBlocker: {
-    color: Colors.error,
+  tilePct: {
+    fontFamily: Fonts.body,
+    fontSize: 15,
+    color: Colors.inkMuted,
   },
-  note: {
+  card: {
+    gap: 10,
+    padding: 18,
+    borderRadius: 22,
+    backgroundColor: Colors.white,
+    borderWidth: 1,
+    borderColor: Colors.line,
+  },
+  cardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardTitle: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 17,
+    color: Colors.ink,
+  },
+  muted: {
     fontFamily: Fonts.body,
     fontSize: 14,
     lineHeight: 20,
     color: Colors.inkMuted,
   },
-  meta: {
+  alertPill: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    color: Colors.error,
+    backgroundColor: '#FBE4E1',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  latestPill: {
+    fontFamily: Fonts.mono,
+    fontSize: 12,
+    color: Colors.forest,
+    backgroundColor: 'rgba(95, 216, 160, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  attention: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: Colors.paper,
+  },
+  attentionName: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 15,
+    color: Colors.ink,
+  },
+  attentionWhy: {
     fontFamily: Fonts.body,
     fontSize: 13,
-    color: Colors.inkMuted,
+    lineHeight: 18,
+    color: Colors.ink,
+  },
+  red: {
+    color: Colors.error,
   },
   allClear: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     padding: 14,
-    borderRadius: 14,
+    borderRadius: 18,
     backgroundColor: 'rgba(95, 216, 160, 0.22)',
   },
   allClearText: {
@@ -351,28 +515,49 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.forest,
   },
-  card: {
-    gap: 10,
-    padding: 20,
-    borderRadius: 20,
-    backgroundColor: Colors.white,
-    borderWidth: 1,
-    borderColor: Colors.line,
+  feedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: 16,
+    backgroundColor: Colors.paper,
   },
-  cardTitle: {
-    fontFamily: Fonts.display,
-    fontSize: 20,
-    lineHeight: 24,
+  feedText: {
+    flex: 1,
+    fontFamily: Fonts.body,
+    fontSize: 15,
+    lineHeight: 20,
     color: Colors.ink,
   },
-  small: {
-    fontSize: 15,
-    lineHeight: 21,
+  feedTime: {
+    fontFamily: Fonts.mono,
+    fontSize: 11,
+    color: Colors.inkMuted,
   },
-  firstCard: {
-    marginTop: 20,
+  dark: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: Colors.forest,
+    marginTop: 4,
   },
-  seeAll: {
-    marginTop: 16,
+  darkText: {
+    fontFamily: Fonts.bodySemiBold,
+    fontSize: 16,
+    color: Colors.white,
+  },
+  signOut: {
+    alignSelf: 'center',
+    paddingVertical: 18,
+  },
+  signOutText: {
+    fontFamily: Fonts.bodyMedium,
+    fontSize: 14,
+    color: Colors.inkMuted,
+    textDecorationLine: 'underline',
   },
 });

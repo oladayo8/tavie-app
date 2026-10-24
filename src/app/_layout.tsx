@@ -58,6 +58,7 @@ function RootStack() {
       <Stack.Protected guard={area === 'creator'}>
         <Stack.Screen name="creator/(tabs)" />
         <Stack.Screen name="creator/new" />
+        <Stack.Screen name="creator/drafts" />
         <Stack.Screen name="creator/programs/[id]/index" />
         <Stack.Screen name="creator/programs/[id]/generate" />
         <Stack.Screen name="creator/programs/[id]/milestones/index" />
