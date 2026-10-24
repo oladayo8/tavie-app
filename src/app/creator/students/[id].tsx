@@ -32,7 +32,7 @@ export default function StudentScreen() {
 
   return (
     <Screen>
-      <TopBar parent="/creator" label="Students" />
+      <TopBar parent="/creator/students" label="Students" />
       {data ? <Record s={data} /> : error ? <ErrorState message={error} onRetry={retry} /> : <Loading />}
     </Screen>
   );

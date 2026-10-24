@@ -4,10 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
 
-/** Paper background, safe-area padding, and a centered column that scrolls with large text. */
-export function Screen({ children, footer }: { children: ReactNode; footer?: ReactNode }) {
+/**
+ * Paper background, safe-area padding, and a centered column that scrolls with large text.
+ * Inside a tab, the tab bar already clears the home indicator, so only the top edge is padded.
+ */
+export function Screen({ children, footer, tab }: { children: ReactNode; footer?: ReactNode; tab?: boolean }) {
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={tab ? ['top'] : ['top', 'bottom']}>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView style={styles.flex} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <View style={styles.column}>{children}</View>

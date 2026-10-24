@@ -1359,6 +1359,33 @@ describe('creator dashboard', () => {
     await denied(as(E, 'select * from public.check_ins'));
   });
 
+  test("My Path shows the student's own milestones, done, current, and upcoming tasks", async () => {
+    const path = async (who) => (await as(who, 'select public.get_path() as p')).rows[0].p;
+    const going = await path(kids.going);
+    assert.equal(going.program.title, 'Close your first deal');
+    assert.equal(going.creator.first_name, 'Eli');
+    assert.equal(going.finished, false);
+    assert.deepEqual(
+      going.milestones.map((m) => [m.number, m.title, m.tasks.map((x) => [x.title, x.state, x.count_so_far])]),
+      [
+        [1, 'Get set up', [['Watch the welcome lesson', 'done', 0], ['Call 10 sellers', 'current', 4]]],
+        [2, 'Make offers', [['Write your offer script', 'upcoming', 0]]],
+      ],
+    );
+    // No task ids: nothing on this tab can act on a task.
+    assert.ok(going.milestones.every((m) => m.tasks.every((x) => !('id' in x))));
+    const stuck = await path(kids.stuck);
+    assert.deepEqual([stuck.milestones[0].tasks[0].state, stuck.milestones[0].tasks[0].stuck], ['current', true]);
+    const done = await path(kids.done);
+    assert.equal(done.finished, true);
+    assert.ok(done.milestones.every((m) => m.tasks.every((x) => x.state === 'done')));
+    // Creators, students who haven't joined, and logged-out callers get nothing.
+    assert.equal(await path(E), null);
+    assert.equal(await path(S), null);
+    await assert.rejects(as('anon', 'select public.get_path()'));
+    await denied(as(X, 'select public.get_path()'));
+  });
+
   test('reading the dashboard changes nothing', async () => {
     const snap = async () =>
       (await as('postgres', `select (select count(*) from public.check_ins) as c, (select count(*) from public.task_progress) as p,
@@ -1366,6 +1393,7 @@ describe('creator dashboard', () => {
     const before = await snap();
     await dashboard(E);
     await student(E, enr[kids.going.email]);
+    await as(kids.going, 'select public.get_path()');
     assert.deepEqual(await snap(), before);
   });
 });

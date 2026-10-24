@@ -14,6 +14,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { Colors } from '@/constants/theme';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { areaFor } from '@/lib/navigation';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -38,6 +39,7 @@ export default function RootLayout() {
 
 function RootStack() {
   const { session, access, loading } = useAuth();
+  const area = areaFor(!!session, access);
 
   useEffect(() => {
     if (!loading) SplashScreen.hideAsync();
@@ -48,13 +50,13 @@ function RootStack() {
   // Each signed-in screen opens only for the access the database gave this person.
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: Colors.paper } }}>
-      <Stack.Protected guard={!session}>
+      <Stack.Protected guard={area === 'signed-out'}>
         <Stack.Screen name="index" />
         <Stack.Screen name="sign-in" />
         <Stack.Screen name="verify" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && access === 'creator'}>
-        <Stack.Screen name="creator/index" />
+      <Stack.Protected guard={area === 'creator'}>
+        <Stack.Screen name="creator/(tabs)" />
         <Stack.Screen name="creator/new" />
         <Stack.Screen name="creator/programs/[id]/index" />
         <Stack.Screen name="creator/programs/[id]/generate" />
@@ -66,13 +68,13 @@ function RootStack() {
         <Stack.Screen name="creator/programs/[id]/share" />
         <Stack.Screen name="creator/students/[id]" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && access === 'needs-name'}>
+      <Stack.Protected guard={area === 'needs-name'}>
         <Stack.Screen name="creator/name" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && access === 'student'}>
-        <Stack.Screen name="student/index" />
+      <Stack.Protected guard={area === 'student'}>
+        <Stack.Screen name="student" />
       </Stack.Protected>
-      <Stack.Protected guard={!!session && access === 'none'}>
+      <Stack.Protected guard={area === 'no-access'}>
         <Stack.Screen name="no-access" />
       </Stack.Protected>
       <Stack.Screen name="j/[slug]" />

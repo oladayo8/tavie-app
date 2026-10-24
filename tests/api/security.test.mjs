@@ -660,6 +660,21 @@ describe('creator dashboard', () => {
     assert.equal(going.path[0].tasks[1].count_so_far, 4);
   });
 
+  test('My Path is read-only and shows only the student\'s own path', async () => {
+    const path = await kid.going.rpc('get_path');
+    assert.equal(path.error, null);
+    assert.deepEqual(
+      path.data.milestones[0].tasks.map((x) => [x.title, x.state, x.count_so_far]),
+      [
+        ['Watch the welcome lesson', 'done', 0],
+        ['Call 10 sellers', 'current', 4],
+      ],
+    );
+    assert.equal((await kid.done.rpc('get_path')).data.finished, true);
+    assert.equal((await f.rpc('get_path')).data, null);
+    assert.ok((await anon.rpc('get_path')).error);
+  });
+
   test("other creators, students, and logged-out callers can't read it", async () => {
     assert.ok((await users.A.client.rpc('creator_dashboard', { program_id: prog })).error);
     assert.ok((await users.A.client.rpc('creator_student', { enrollment_id: enr.going })).error);

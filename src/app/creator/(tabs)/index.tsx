@@ -1,32 +1,27 @@
 import { router } from 'expo-router';
-import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
-import { Row } from '@/components/rows';
+import { ProgramPicker } from '@/components/program-picker';
 import { Screen } from '@/components/screen';
-import { StudentRowCard } from '@/components/student-row';
 import { ErrorState, Loading } from '@/components/states';
-import { Body, Headline, Label } from '@/components/text';
+import { Body, Label } from '@/components/text';
 import { Wordmark } from '@/components/wordmark';
-import { Colors, Fonts, Spacing } from '@/constants/theme';
+import { Colors, Fonts } from '@/constants/theme';
 import { signOut } from '@/lib/auth';
-import { listPrograms } from '@/lib/builder';
 import { attentionLine, getDashboard, type Dashboard } from '@/lib/dashboard';
+import { useSelectedProgram } from '@/lib/selected-program';
 import { useLoad } from '@/lib/use-load';
 
 /**
- * Creator home. With a published program it opens on who needs help: four counts, then
- * "Needs attention" (blockers first, then inactive), then everyone. All programs, drafts
- * included, stay below for building.
+ * Overview tab, the creator's home: for the selected published program, four counts and who
+ * needs help (blockers first, then inactive). The full list is on the Students tab.
  */
-export default function CreatorHome() {
-  const [programId, setProgramId] = useState<string | null>(null);
-  const load = useCallback(
-    async () => ({ dashboard: await getDashboard(programId), programs: await listPrograms() }),
-    [programId],
-  );
-  const { data, loading, error, retry } = useLoad(load);
+export default function OverviewScreen() {
+  const { programId, setProgramId } = useSelectedProgram();
+  const load = useCallback(() => getDashboard(programId), [programId]);
+  const { data: dashboard, loading, error, retry } = useLoad(load);
 
   const header = (
     <View style={styles.bar}>
@@ -43,20 +38,19 @@ export default function CreatorHome() {
     </View>
   );
 
-  if (!data) {
+  if (!dashboard) {
     return (
-      <Screen>
+      <Screen tab>
         {header}
         {error ? <ErrorState message={error} onRetry={retry} /> : <Loading />}
       </Screen>
     );
   }
 
-  const { dashboard, programs } = data;
   const selected = dashboard.programs.find((p) => p.id === dashboard.program_id) ?? null;
 
   return (
-    <Screen>
+    <Screen tab>
       {header}
       {selected ? (
         <View style={styles.dashboard}>
@@ -79,32 +73,17 @@ export default function CreatorHome() {
           </View>
           <Students dashboard={dashboard} programId={selected.id} />
         </View>
-      ) : null}
-
-      <View style={styles.section}>
-        <Label>Your programs</Label>
-        {programs.length ? (
-          programs.map((p) => (
-            <Row
-              key={p.id}
-              title={p.goal}
-              badge={p.status === 'live' ? 'Live' : p.status === 'paused' ? 'Paused' : 'Draft'}
-              detail={`${p.milestoneCount} ${p.milestoneCount === 1 ? 'milestone' : 'milestones'} · ${p.taskCount} ${p.taskCount === 1 ? 'task' : 'tasks'}`}
-              onPress={() => router.push({ pathname: '/creator/programs/[id]', params: { id: p.id } })}
-            />
-          ))
-        ) : (
-          <View style={styles.empty}>
-            <Headline>Build your first path.</Headline>
-            <Body muted>It takes about 45 minutes. You can stop any time; everything saves as you go.</Body>
-          </View>
-        )}
-        <Button
-          variant={selected ? 'secondary' : 'primary'}
-          title="New program"
-          onPress={() => router.push('/creator/new')}
-        />
-      </View>
+      ) : (
+        <View style={[styles.card, styles.firstCard]}>
+          <Text maxFontSizeMultiplier={1.3} style={styles.cardTitle}>
+            Your students will show up here.
+          </Text>
+          <Body muted style={styles.small}>
+            Build and publish a program, then share its link. You’ll see who joined and who needs help.
+          </Body>
+          <Button title="Go to Programs" onPress={() => router.navigate('/creator/programs')} />
+        </View>
+      )}
     </Screen>
   );
 }
@@ -197,53 +176,13 @@ function Students({ dashboard, programId }: { dashboard: Dashboard; programId: s
         )}
       </View>
 
-      <View style={styles.section}>
-        <View style={styles.sectionHead}>
-          <Label>All students</Label>
-          <Label>{counts.enrolled}</Label>
-        </View>
-        <View style={styles.group}>
-          {dashboard.students.map((s, i) => (
-            <StudentRowCard key={s.enrollment_id} student={s} first={i === 0} onPress={() => open(s.enrollment_id)} />
-          ))}
-        </View>
-        <Body muted style={styles.footnote}>
-          Inactive means no check-in for {dashboard.inactive_days ?? 3} days. Everything here is what students reported.
-        </Body>
-      </View>
+      <Button
+        variant="secondary"
+        title={`See all ${counts.enrolled} ${counts.enrolled === 1 ? 'student' : 'students'}`}
+        onPress={() => router.navigate('/creator/students')}
+        style={styles.seeAll}
+      />
     </>
-  );
-}
-
-function ProgramPicker({
-  programs,
-  selected,
-  onSelect,
-  busy,
-}: {
-  programs: Dashboard['programs'];
-  selected: string;
-  onSelect: (id: string) => void;
-  busy: boolean;
-}) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.picker}>
-      {programs.map((p) => {
-        const on = p.id === selected;
-        return (
-          <Pressable
-            key={p.id}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on, busy: on && busy }}
-            onPress={() => onSelect(p.id)}
-            style={({ pressed }) => [styles.chip, on && styles.chipOn, pressed && styles.pressed]}>
-            <Text maxFontSizeMultiplier={1.3} style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>
-              {p.title}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
   );
 }
 
@@ -281,30 +220,6 @@ const styles = StyleSheet.create({
   dashboard: {
     gap: 16,
     paddingTop: 20,
-  },
-  picker: {
-    gap: 8,
-  },
-  chip: {
-    maxWidth: 220,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: Colors.line,
-    backgroundColor: Colors.white,
-  },
-  chipOn: {
-    backgroundColor: Colors.ink,
-    borderColor: Colors.ink,
-  },
-  chipText: {
-    fontFamily: Fonts.bodyMedium,
-    fontSize: 14,
-    color: Colors.ink,
-  },
-  chipTextOn: {
-    color: Colors.white,
   },
   titleBlock: {
     gap: 2,
@@ -436,17 +351,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: Colors.forest,
   },
-  group: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: Colors.line,
-    backgroundColor: Colors.white,
-    overflow: 'hidden',
-  },
-  footnote: {
-    fontSize: 13,
-    lineHeight: 18,
-  },
   card: {
     gap: 10,
     padding: 20,
@@ -465,7 +369,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
-  empty: {
-    gap: Spacing.three,
+  firstCard: {
+    marginTop: 20,
+  },
+  seeAll: {
+    marginTop: 16,
   },
 });
