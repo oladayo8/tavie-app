@@ -103,7 +103,7 @@ export default function ProgramOverviewScreen() {
       <TopBar parent="/creator/programs" label="Programs" />
       <View style={styles.content}>
         <Label style={isLive ? styles.live : undefined}>{isLive ? 'Live' : 'Draft'}</Label>
-        <Headline>{program.goal}</Headline>
+        <Headline size="compact">{program.goal}</Headline>
 
         <TextField label="Goal" value={goalText} onChangeText={setGoal} maxLength={LIMITS.goal.max} multiline />
         <TextField

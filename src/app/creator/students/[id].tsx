@@ -2,6 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useCallback, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Avatar } from '@/components/avatar';
 import { Screen } from '@/components/screen';
 import { StatusPill } from '@/components/student-row';
 import { ErrorState, Loading } from '@/components/states';
@@ -43,17 +44,22 @@ function Record({ s }: { s: StudentRecord }) {
   return (
     <View style={styles.content}>
       <View style={styles.head}>
-        <View style={styles.nameRow}>
+        <Avatar name={s.name} size={56} />
+        <View style={styles.headText}>
           <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={styles.name} numberOfLines={2}>
-            {s.name}
+            {s.name ?? 'No name yet'}
           </Text>
-          <StatusPill status={s.status} attention={s.attention} />
+          <Text maxFontSizeMultiplier={1.3} style={styles.email} numberOfLines={1} ellipsizeMode="middle" selectable>
+            {s.email}
+          </Text>
+          <View style={styles.pill}>
+            <StatusPill status={s.status} attention={s.attention} />
+          </View>
         </View>
-        {s.name !== s.email ? <Small>{s.email}</Small> : null}
-        <Small>
-          {s.program.title} · Joined {when(s.joined_at)}
-        </Small>
       </View>
+      <Small>
+        {s.program.title} · Joined {when(s.joined_at)}
+      </Small>
 
       <View style={styles.facts}>
         <Fact label="Tasks done" value={`${s.progress.done}/${s.progress.total}`} />
@@ -268,15 +274,25 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   head: {
-    gap: 4,
-  },
-  nameRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  headText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  email: {
+    fontFamily: Fonts.body,
+    fontSize: 14,
+    color: Colors.inkMuted,
+  },
+  pill: {
+    flexDirection: 'row',
+    paddingTop: 6,
   },
   name: {
-    flex: 1,
     fontFamily: Fonts.display,
     fontSize: 22,
     lineHeight: 26,

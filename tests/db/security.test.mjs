@@ -73,7 +73,9 @@ before(async () => {
 
   await db.query(readFileSync(join(ROOT, 'tests/db/supabase-stub.sql'), 'utf8'));
   const dir = join(ROOT, 'supabase/migrations');
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql')).sort()) {
+  for (const file of readdirSync(dir)
+    .filter((f) => f.endsWith('.sql'))
+    .sort()) {
     await db.query(readFileSync(join(dir, file), 'utf8'));
   }
 
@@ -91,7 +93,9 @@ before(async () => {
   await as(B, "select public.register_creator('Ana', 'Diaz')", [], { commit: true });
   await as(S, 'select public.register_student()', [], { commit: true });
 
-  const pa = await as(A, "select * from public.create_program('Get your first property under contract', 8)", [], { commit: true });
+  const pa = await as(A, "select * from public.create_program('Get your first property under contract', 8)", [], {
+    commit: true,
+  });
   ids.progA = pa.rows[0].id;
   ids.slugA = pa.rows[0].slug;
   const pa2 = await as(A, "select * from public.create_program('Second program goal', 4)", [], { commit: true });
@@ -102,9 +106,14 @@ before(async () => {
   ids.slugB = pb.rows[0].slug;
 
   const insertMilestone = (who, prog, position, title) =>
-    as(who, 'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id', [prog, position, title], {
-      commit: true,
-    }).then((r) => r.rows[0].id);
+    as(
+      who,
+      'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id',
+      [prog, position, title],
+      {
+        commit: true,
+      },
+    ).then((r) => r.rows[0].id);
   ids.mA1 = await insertMilestone(A, ids.progA, 0, 'Understand wholesaling fundamentals');
   ids.mA2 = await insertMilestone(A, ids.progA, 1, 'Identify a target market');
   ids.mA2x = await insertMilestone(A, ids.progA2, 0, 'Other program milestone');
@@ -123,13 +132,23 @@ before(async () => {
   ids.tB1 = await insertTask(B, ids.mB1, 0, 'B task', 'B why');
 
   const insertLink = (who, prog, title) =>
-    as(who, "insert into public.resources (program_id, type, title, url) values ($1, 'link', $2, 'https://example.com/a') returning id", [prog, title], {
-      commit: true,
-    }).then((r) => r.rows[0].id);
+    as(
+      who,
+      "insert into public.resources (program_id, type, title, url) values ($1, 'link', $2, 'https://example.com/a') returning id",
+      [prog, title],
+      {
+        commit: true,
+      },
+    ).then((r) => r.rows[0].id);
   ids.rA = await insertLink(A, ids.progA, 'Seller script');
   ids.rA2 = await insertLink(A, ids.progA2, 'Other program resource');
   ids.rB = await insertLink(B, ids.progB, 'B resource');
-  await as(B, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [ids.tB1, ids.rB], { commit: true });
+  await as(
+    B,
+    'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)',
+    [ids.tB1, ids.rB],
+    { commit: true },
+  );
 });
 
 after(async () => {
@@ -219,7 +238,10 @@ describe('database defaults', () => {
       ['public.task_resources', 'resource_id'],
     ];
     for (const [table, column] of cases) {
-      const { rows } = await as('postgres', "select has_column_privilege('authenticated', $1, $2, 'UPDATE') as ok", [table, column]);
+      const { rows } = await as('postgres', "select has_column_privilege('authenticated', $1, $2, 'UPDATE') as ok", [
+        table,
+        column,
+      ]);
       assert.equal(rows[0].ok, false, `${table}.${column} should not be updatable`);
     }
     for (const table of ['public.creators', 'public.students', 'public.programs']) {
@@ -241,7 +263,9 @@ describe('roles come from the database, not metadata', () => {
   });
 
   test('nobody can insert a creators row directly', async () => {
-    await denied(as(N, "insert into public.creators (id, first_name, email) values ($1, 'Eve', 'eve@example.com')", [N.id]));
+    await denied(
+      as(N, "insert into public.creators (id, first_name, email) values ($1, 'Eve', 'eve@example.com')", [N.id]),
+    );
     await denied(as(N, "insert into public.students (id, email) values ($1, 'eve@example.com')", [N.id]));
   });
 
@@ -310,15 +334,16 @@ describe('programs', () => {
 
   test('a creator sees only their own programs', async () => {
     const { rows } = await as(A, 'select id from public.programs order by created_at');
-    assert.deepEqual(
-      rows.map((r) => r.id).sort(),
-      [ids.progA, ids.progA2].sort(),
-    );
+    assert.deepEqual(rows.map((r) => r.id).sort(), [ids.progA, ids.progA2].sort());
   });
 
   test('programs cannot be inserted directly', async () => {
     await denied(
-      as(A, "insert into public.programs (creator_id, title, goal, duration_weeks, slug) values ($1, 't', 'goal', 4, 'sneaky')", [A.id]),
+      as(
+        A,
+        "insert into public.programs (creator_id, title, goal, duration_weeks, slug) values ($1, 't', 'goal', 4, 'sneaky')",
+        [A.id],
+      ),
     );
   });
 
@@ -329,7 +354,10 @@ describe('programs', () => {
   });
 
   test("a creator can edit their own program but not another creator's", async () => {
-    assert.equal((await as(A, "update public.programs set title = 'New title' where id = $1", [ids.progA])).rowCount, 1);
+    assert.equal(
+      (await as(A, "update public.programs set title = 'New title' where id = $1", [ids.progA])).rowCount,
+      1,
+    );
     assert.equal((await as(A, "update public.programs set title = 'Hijacked' where id = $1", [ids.progB])).rowCount, 0);
   });
 
@@ -348,7 +376,9 @@ describe('programs', () => {
 
 describe('milestones, tasks, and resources', () => {
   test("a creator cannot add a milestone to another creator's program", async () => {
-    await denied(as(A, "insert into public.milestones (program_id, position, title) values ($1, 5, 'Sneaky')", [ids.progB]));
+    await denied(
+      as(A, "insert into public.milestones (program_id, position, title) values ($1, 5, 'Sneaky')", [ids.progB]),
+    );
   });
 
   test("a creator cannot read or change another creator's milestones", async () => {
@@ -376,9 +406,19 @@ describe('milestones, tasks, and resources', () => {
   });
 
   test('task report settings are checked', async () => {
-    await invalid(as(A, "insert into public.tasks (milestone_id, position, title, completion_type) values ($1, 9, 'Calls', 'count')", [ids.mA1]));
     await invalid(
-      as(A, "insert into public.tasks (milestone_id, position, title, follow_up_options) values ($1, 9, 'X', array['Yes','No'])", [ids.mA1]),
+      as(
+        A,
+        "insert into public.tasks (milestone_id, position, title, completion_type) values ($1, 9, 'Calls', 'count')",
+        [ids.mA1],
+      ),
+    );
+    await invalid(
+      as(
+        A,
+        "insert into public.tasks (milestone_id, position, title, follow_up_options) values ($1, 9, 'X', array['Yes','No'])",
+        [ids.mA1],
+      ),
     );
     await invalid(
       as(
@@ -387,7 +427,11 @@ describe('milestones, tasks, and resources', () => {
         [ids.mA1],
       ),
     );
-    await invalid(as(A, "insert into public.tasks (milestone_id, position, title, completion_type) values ($1, 9, 'X', 'photo')", [ids.mA1]));
+    await invalid(
+      as(A, "insert into public.tasks (milestone_id, position, title, completion_type) values ($1, 9, 'X', 'photo')", [
+        ids.mA1,
+      ]),
+    );
     const ok = await as(
       A,
       "insert into public.tasks (milestone_id, position, title, completion_type, target_count, unit, check_in_question) values ($1, 9, 'Call 50 sellers', 'count', 50, 'calls', 'How many calls did you make?')",
@@ -399,26 +443,47 @@ describe('milestones, tasks, and resources', () => {
   test('two items cannot share a position', async () => {
     // Positions are checked at commit so reorders can swap; force the check now.
     await invalid(
-      as(A, `set constraints all immediate; insert into public.milestones (program_id, position, title) values ('${ids.progA}', 0, 'Clash')`),
+      as(
+        A,
+        `set constraints all immediate; insert into public.milestones (program_id, position, title) values ('${ids.progA}', 0, 'Clash')`,
+      ),
       '23505',
     );
   });
 
   test("a creator cannot add a resource to another creator's program", async () => {
     await denied(
-      as(A, "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Sneaky', 'https://example.com')", [ids.progB]),
+      as(
+        A,
+        "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Sneaky', 'https://example.com')",
+        [ids.progB],
+      ),
     );
     assert.equal((await as(A, 'select * from public.resources where id = $1', [ids.rB])).rowCount, 0);
   });
 
   test('resource links are checked', async () => {
     await invalid(
-      as(A, "insert into public.resources (program_id, type, title, url) values ($1, 'youtube', 'Not YouTube', 'https://evil.example.com/watch')", [
-        ids.progA,
-      ]),
+      as(
+        A,
+        "insert into public.resources (program_id, type, title, url) values ($1, 'youtube', 'Not YouTube', 'https://evil.example.com/watch')",
+        [ids.progA],
+      ),
     );
-    await invalid(as(A, "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Plain http', 'http://example.com')", [ids.progA]));
-    await invalid(as(A, "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Script', 'javascript:alert(1)')", [ids.progA]));
+    await invalid(
+      as(
+        A,
+        "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Plain http', 'http://example.com')",
+        [ids.progA],
+      ),
+    );
+    await invalid(
+      as(
+        A,
+        "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Script', 'javascript:alert(1)')",
+        [ids.progA],
+      ),
+    );
     const yt = await as(
       A,
       "insert into public.resources (program_id, type, title, url) values ($1, 'youtube', 'Lesson 4', 'https://www.youtube.com/watch?v=abc')",
@@ -429,7 +494,10 @@ describe('milestones, tasks, and resources', () => {
 
   test("a file resource must point into the creator's own folder for that program", async () => {
     const insertFile = (path) =>
-      as(A, "insert into public.resources (program_id, type, title, file_path) values ($1, 'file', 'PDF', $2)", [ids.progA, path]);
+      as(A, "insert into public.resources (program_id, type, title, file_path) values ($1, 'file', 'PDF', $2)", [
+        ids.progA,
+        path,
+      ]);
     await denied(insertFile(`${B.id}/${ids.progA}/script.pdf`));
     await denied(insertFile(`${A.id}/${ids.progA2}/script.pdf`));
     await denied(insertFile('script.pdf'));
@@ -437,21 +505,37 @@ describe('milestones, tasks, and resources', () => {
   });
 
   test("a creator cannot link another creator's resource to their task", async () => {
-    await refused(as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [ids.tA1, ids.rB]));
+    await refused(
+      as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [ids.tA1, ids.rB]),
+    );
   });
 
   test("a creator cannot link a resource to another creator's task", async () => {
-    await refused(as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 1)', [ids.tB1, ids.rA]));
+    await refused(
+      as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 1)', [ids.tB1, ids.rA]),
+    );
   });
 
-  test("a task can only use resources from its own program", async () => {
-    await invalid(as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [ids.tA1, ids.rA2]));
+  test('a task can only use resources from its own program', async () => {
+    await invalid(
+      as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [
+        ids.tA1,
+        ids.rA2,
+      ]),
+    );
   });
 
   test('a task holds at most three resources', async () => {
-    await invalid(as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 3)', [ids.tA1, ids.rA]));
+    await invalid(
+      as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 3)', [ids.tA1, ids.rA]),
+    );
     assert.equal(
-      (await as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [ids.tA1, ids.rA])).rowCount,
+      (
+        await as(A, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [
+          ids.tA1,
+          ids.rA,
+        ])
+      ).rowCount,
       1,
     );
   });
@@ -466,10 +550,14 @@ describe('reordering', () => {
     await db.query('begin');
     try {
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: A.id, role: 'authenticated' }),
+      ]);
       await db.query('select public.reorder_milestones($1, $2)', [ids.progA, [ids.mA2, ids.mA1]]);
       await db.query('select public.reorder_tasks($1, $2)', [ids.mA1, [ids.tA2, ids.tA1]]);
-      const m = await db.query('select id, position from public.milestones where program_id = $1 order by position', [ids.progA]);
+      const m = await db.query('select id, position from public.milestones where program_id = $1 order by position', [
+        ids.progA,
+      ]);
       assert.deepEqual(
         m.rows.map((r) => r.id),
         [ids.mA2, ids.mA1],
@@ -502,8 +590,14 @@ describe('reordering', () => {
 
 describe('publishing', () => {
   test("a creator cannot publish another creator's program, or one that doesn't exist", async () => {
-    await assert.rejects(as(A, 'select public.publish_program($1)', [ids.progB]), (e) => e.code === '42501' && /not found/.test(e.message));
-    await assert.rejects(as(A, 'select public.publish_program($1)', [randomUUID()]), (e) => e.code === '42501' && /not found/.test(e.message));
+    await assert.rejects(
+      as(A, 'select public.publish_program($1)', [ids.progB]),
+      (e) => e.code === '42501' && /not found/.test(e.message),
+    );
+    await assert.rejects(
+      as(A, 'select public.publish_program($1)', [randomUUID()]),
+      (e) => e.code === '42501' && /not found/.test(e.message),
+    );
   });
 
   test('publish refuses an incomplete program and says what is missing', async () => {
@@ -523,9 +617,13 @@ describe('publishing', () => {
     await db.query('begin');
     try {
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: A.id, role: 'authenticated' }),
+      ]);
       await db.query("update public.creators set agent_name = 'Marcus''s agent' where id = $1", [A.id]);
-      await db.query("insert into public.milestones (program_id, position, title) values ($1, 1, 'Empty milestone')", [ids.progA2]);
+      await db.query("insert into public.milestones (program_id, position, title) values ($1, 1, 'Empty milestone')", [
+        ids.progA2,
+      ]);
       await db.query(
         "insert into public.tasks (milestone_id, position, title, why, completion_type) values ($1, 1, 'Yes/no without a question', 'Because', 'yes_no')",
         [ids.mA2x],
@@ -589,10 +687,14 @@ describe('join links', () => {
 });
 
 describe('file storage', () => {
-  const put = (who, bucket, name) => as(who, 'insert into storage.objects (bucket_id, name) values ($1, $2)', [bucket, name]);
+  const put = (who, bucket, name) =>
+    as(who, 'insert into storage.objects (bucket_id, name) values ($1, $2)', [bucket, name]);
 
   test('the bucket is private, PDF only, 20 MB', async () => {
-    const { rows } = await as('postgres', "select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'program-files'");
+    const { rows } = await as(
+      'postgres',
+      "select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'program-files'",
+    );
     assert.deepEqual(rows[0], { public: false, file_size_limit: '20971520', allowed_mime_types: ['application/pdf'] });
   });
 
@@ -611,12 +713,13 @@ describe('file storage', () => {
     await denied(put('anon', 'program-files', `${A.id}/${ids.progA}/x.pdf`));
   });
 
-  test("files are visible only to the creator who owns them", async () => {
-    await as('postgres', 'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)', [
-      'program-files',
-      `${B.id}/${ids.progB}/b.pdf`,
-      B.id,
-    ], { commit: true });
+  test('files are visible only to the creator who owns them', async () => {
+    await as(
+      'postgres',
+      'insert into storage.objects (bucket_id, name, owner) values ($1, $2, $3)',
+      ['program-files', `${B.id}/${ids.progB}/b.pdf`, B.id],
+      { commit: true },
+    );
     assert.equal((await as(B, "select * from storage.objects where bucket_id = 'program-files'")).rowCount, 1);
     assert.equal((await as(A, "select * from storage.objects where bucket_id = 'program-files'")).rowCount, 0);
     assert.equal((await as(S, "select * from storage.objects where bucket_id = 'program-files'")).rowCount, 0);
@@ -688,7 +791,9 @@ describe('creator builder writes', () => {
     await db.query('begin');
     try {
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: A.id, role: 'authenticated' }),
+      ]);
       await db.query('update public.milestones set archived_at = now() where id = $1', [ids.mA1]);
       await db.query('select public.reorder_milestones($1, $2)', [ids.progA, [ids.mA2, ids.mA1]]);
       await db.query('set constraints all immediate');
@@ -720,7 +825,13 @@ describe('AI usage cap and plan import', () => {
     {
       title: 'Find your market',
       tasks: [
-        { title: 'Pick one zip code', why: 'Focus wins.', completion_type: 'text', check_in_question: 'Which zip and why?', est_minutes: 45 },
+        {
+          title: 'Pick one zip code',
+          why: 'Focus wins.',
+          completion_type: 'text',
+          check_in_question: 'Which zip and why?',
+          est_minutes: 45,
+        },
         {
           title: 'Call 50 sellers',
           why: 'Deals come from conversations.',
@@ -734,7 +845,17 @@ describe('AI usage cap and plan import', () => {
         },
       ],
     },
-    { title: 'Make offers', tasks: [{ title: 'Submit one offer', why: 'Offers make deals.', completion_type: 'yes_no', check_in_question: 'Did you submit it?' }] },
+    {
+      title: 'Make offers',
+      tasks: [
+        {
+          title: 'Submit one offer',
+          why: 'Offers make deals.',
+          completion_type: 'yes_no',
+          check_in_question: 'Did you submit it?',
+        },
+      ],
+    },
   ];
 
   // Runs SQL as creator A inside one transaction (rolled back), so start and finish calls see each other.
@@ -751,31 +872,56 @@ describe('AI usage cap and plan import', () => {
   });
 
   test('a creator can run only one AI request at a time', async () => {
-    await invalid(as(A, loop("perform public.start_ai_request('task'); perform public.start_ai_request('plan');")), '55P03');
-    await as(A, loop("perform public.finish_ai_request(public.start_ai_request('task'), true); perform public.start_ai_request('plan');"));
+    await invalid(
+      as(A, loop("perform public.start_ai_request('task'); perform public.start_ai_request('plan');")),
+      '55P03',
+    );
+    await as(
+      A,
+      loop(
+        "perform public.finish_ai_request(public.start_ai_request('task'), true); perform public.start_ai_request('plan');",
+      ),
+    );
   });
 
   test('a creator gets 5 plans and 30 task suggestions a day, then is refused', async () => {
-    const plans = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;";
-    const tasks = "for i in 1..30 loop perform public.finish_ai_request(public.start_ai_request('task'), true); end loop;";
+    const plans =
+      "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;";
+    const tasks =
+      "for i in 1..30 loop perform public.finish_ai_request(public.start_ai_request('task'), true); end loop;";
     await as(A, loop(plans + tasks));
     await invalid(as(A, loop(plans + "perform public.start_ai_request('plan');")), '54000');
     await invalid(as(A, loop(tasks + "perform public.start_ai_request('task');")), '54000');
     // The limits are per creator.
-    await as(A, loop(plans + "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: B.id, role: 'authenticated' }) + "', true); perform public.start_ai_request('plan');"));
+    await as(
+      A,
+      loop(
+        plans +
+          "perform set_config('request.jwt.claims', '" +
+          JSON.stringify({ sub: B.id, role: 'authenticated' }) +
+          "', true); perform public.start_ai_request('plan');",
+      ),
+    );
   });
 
   test('requests that never reached Claude do not count, and one that died stops blocking', async () => {
-    const failed = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), false); end loop;";
-    const done = "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;";
+    const failed =
+      "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), false); end loop;";
+    const done =
+      "for i in 1..5 loop perform public.finish_ai_request(public.start_ai_request('plan'), true); end loop;";
     await as(A, loop(failed + done));
     await invalid(as(A, loop(failed + done + "perform public.start_ai_request('plan');")), '54000');
 
     await db.query('begin');
     try {
-      await db.query("insert into public.ai_requests (creator_id, kind, created_at) values ($1, 'plan', now() - interval '5 minutes')", [A.id]);
+      await db.query(
+        "insert into public.ai_requests (creator_id, kind, created_at) values ($1, 'plan', now() - interval '5 minutes')",
+        [A.id],
+      );
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: A.id, role: 'authenticated' }),
+      ]);
       await db.query("select public.start_ai_request('task')");
     } finally {
       await db.query('rollback');
@@ -783,10 +929,17 @@ describe('AI usage cap and plan import', () => {
   });
 
   test("a creator cannot finish someone else's request", async () => {
-    const asB = "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: B.id, role: 'authenticated' }) + "', true);";
-    const asA = "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: A.id, role: 'authenticated' }) + "', true);";
+    const asB =
+      "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: B.id, role: 'authenticated' }) + "', true);";
+    const asA =
+      "perform set_config('request.jwt.claims', '" + JSON.stringify({ sub: A.id, role: 'authenticated' }) + "', true);";
     await invalid(
-      as(A, loop(`i := public.start_ai_request('plan'); ${asB} perform public.finish_ai_request(i, true); ${asA} perform public.start_ai_request('plan');`)),
+      as(
+        A,
+        loop(
+          `i := public.start_ai_request('plan'); ${asB} perform public.finish_ai_request(i, true); ${asA} perform public.start_ai_request('plan');`,
+        ),
+      ),
       '55P03',
     );
   });
@@ -801,8 +954,12 @@ describe('AI usage cap and plan import', () => {
     await db.query('begin');
     try {
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: A.id, role: 'authenticated' })]);
-      const before = await db.query('select max(position) as p from public.milestones where program_id = $1', [ids.progA]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: A.id, role: 'authenticated' }),
+      ]);
+      const before = await db.query('select max(position) as p from public.milestones where program_id = $1', [
+        ids.progA,
+      ]);
       const r = await db.query('select public.import_plan($1, $2) as saved', [ids.progA, JSON.stringify(plan)]);
       assert.equal(r.rows[0].saved, 3);
       const added = await db.query(
@@ -818,7 +975,9 @@ describe('AI usage cap and plan import', () => {
           ['Make offers', 1],
         ],
       );
-      const count = await db.query("select target_count, follow_up_options from public.tasks where title = 'Call 50 sellers'");
+      const count = await db.query(
+        "select target_count, follow_up_options from public.tasks where title = 'Call 50 sellers'",
+      );
       assert.deepEqual(count.rows[0], { target_count: 50, follow_up_options: ['Wants to sell', 'Not motivated'] });
     } finally {
       await db.query('rollback');
@@ -886,14 +1045,21 @@ describe('students: joining, Today, and check-ins', () => {
     await as(K, 'select public.register_student()', [], { commit: true });
     await as(C, "update public.creators set agent_name = 'Cara''s agent' where id = $1", [C.id], { commit: true });
 
-    const p = await as(C, "select * from public.create_program('Close your first wholesale deal', 8)", [], { commit: true });
+    const p = await as(C, "select * from public.create_program('Close your first wholesale deal', 8)", [], {
+      commit: true,
+    });
     prog = p.rows[0].id;
     slug = p.rows[0].slug;
     const m = async (position, title) =>
       (
-        await as(C, 'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id', [prog, position, title], {
-          commit: true,
-        })
+        await as(
+          C,
+          'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id',
+          [prog, position, title],
+          {
+            commit: true,
+          },
+        )
       ).rows[0].id;
     const task = async (milestone, position, fields) => {
       const cols = ['milestone_id', 'position', ...Object.keys(fields)];
@@ -934,11 +1100,26 @@ describe('students: joining, Today, and check-ins', () => {
       completion_type: 'text',
       check_in_question: 'Paste your script.',
     });
-    const r = await as(C, "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Welcome lesson', 'https://example.com/w') returning id", [prog], {
-      commit: true,
-    });
-    await as(C, 'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)', [t.done, r.rows[0].id], { commit: true });
-    await as(C, 'insert into storage.objects (bucket_id, name) values ($1, $2)', ['program-files', `${C.id}/${prog}/script.pdf`], { commit: true });
+    const r = await as(
+      C,
+      "insert into public.resources (program_id, type, title, url) values ($1, 'link', 'Welcome lesson', 'https://example.com/w') returning id",
+      [prog],
+      {
+        commit: true,
+      },
+    );
+    await as(
+      C,
+      'insert into public.task_resources (task_id, resource_id, position) values ($1, $2, 0)',
+      [t.done, r.rows[0].id],
+      { commit: true },
+    );
+    await as(
+      C,
+      'insert into storage.objects (bucket_id, name) values ($1, $2)',
+      ['program-files', `${C.id}/${prog}/script.pdf`],
+      { commit: true },
+    );
     const published = await as(C, 'select public.publish_program($1) as r', [prog], { commit: true });
     assert.equal(published.rows[0].r.ok, true, JSON.stringify(published.rows[0].r));
 
@@ -972,7 +1153,8 @@ describe('students: joining, Today, and check-ins', () => {
   });
 
   test('joining enrolls the student in that program and shows the first task', async () => {
-    const card = (await as(J, 'select public.join_program($1) as card', [slug.toUpperCase()], { commit: true })).rows[0].card;
+    const card = (await as(J, 'select public.join_program($1) as card', [slug.toUpperCase()], { commit: true })).rows[0]
+      .card;
     enrollment = card.enrollment_id;
     assert.equal(card.program.title, 'Close your first wholesale deal');
     assert.deepEqual(card.creator, { first_name: 'Cara', last_name: 'Lane', agent_name: "Cara's agent" });
@@ -984,12 +1166,20 @@ describe('students: joining, Today, and check-ins', () => {
       card.resources.map((r) => r.title),
       ['Welcome lesson'],
     );
-    const rows = await as('postgres', 'select student_id, program_id, consented_at is not null as consent from public.enrollments where id = $1', [enrollment]);
+    const rows = await as(
+      'postgres',
+      'select student_id, program_id, consented_at is not null as consent from public.enrollments where id = $1',
+      [enrollment],
+    );
     assert.deepEqual(rows.rows[0], { student_id: J.id, program_id: prog, consent: true });
     // Joining again changes nothing.
     const again = (await as(J, 'select public.join_program($1) as card', [slug], { commit: true })).rows[0].card;
     assert.equal(again.enrollment_id, enrollment);
-    assert.equal((await as('postgres', 'select count(*)::int as n from public.enrollments where student_id = $1', [J.id])).rows[0].n, 1);
+    assert.equal(
+      (await as('postgres', 'select count(*)::int as n from public.enrollments where student_id = $1', [J.id])).rows[0]
+        .n,
+      1,
+    );
   });
 
   test('students and creators cannot touch enrollment tables or engine helpers directly', async () => {
@@ -997,7 +1187,12 @@ describe('students: joining, Today, and check-ins', () => {
       await denied(as(J, `select * from public.${table}`));
       await denied(as(C, `select * from public.${table}`));
     }
-    await denied(as(J, "insert into public.task_progress (enrollment_id, task_id, state) values ($1, $2, 'done')", [enrollment, t.done]));
+    await denied(
+      as(J, "insert into public.task_progress (enrollment_id, task_id, state) values ($1, $2, 'done')", [
+        enrollment,
+        t.done,
+      ]),
+    );
     await denied(as(J, 'select private.current_task($1)', [enrollment]));
     await denied(as(J, 'select private.today_card($1)', [enrollment]));
     // Still no direct reads of the program itself.
@@ -1025,7 +1220,11 @@ describe('students: joining, Today, and check-ins', () => {
     assert.equal(r.ok, false);
     assert.equal(r.stale, true);
     assert.equal(r.today.task.id, t.count);
-    assert.equal((await as('postgres', 'select count(*)::int as n from public.check_ins where enrollment_id = $1', [enrollment])).rows[0].n, 1);
+    assert.equal(
+      (await as('postgres', 'select count(*)::int as n from public.check_ins where enrollment_id = $1', [enrollment]))
+        .rows[0].n,
+      1,
+    );
   });
 
   test('a number task keeps partial progress, and a retried request counts once', async () => {
@@ -1078,9 +1277,14 @@ describe('students: joining, Today, and check-ins', () => {
     try {
       await db.query("update public.programs set status = 'paused' where id = $1", [prog]);
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: J.id, role: 'authenticated' })]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: J.id, role: 'authenticated' }),
+      ]);
       await assert.rejects(
-        db.query("select public.submit_check_in($1, $2, 'complete', value_text => 'A long enough answer')", [enrollment, t.text]),
+        db.query("select public.submit_check_in($1, $2, 'complete', value_text => 'A long enough answer')", [
+          enrollment,
+          t.text,
+        ]),
         (e) => e.code === '55000',
       );
     } finally {
@@ -1093,9 +1297,17 @@ describe('students: joining, Today, and check-ins', () => {
     const r = await checkIn(J, t.text, 'complete', { text: 'Hi, I buy houses for cash in your area.' });
     assert.equal(r.today.task, null);
     assert.deepEqual(r.today.progress, { done: 5, total: 5 });
-    const e = await as('postgres', 'select finished_at is not null as finished, last_active_at is not null as active from public.enrollments where id = $1', [enrollment]);
+    const e = await as(
+      'postgres',
+      'select finished_at is not null as finished, last_active_at is not null as active from public.enrollments where id = $1',
+      [enrollment],
+    );
     assert.deepEqual(e.rows[0], { finished: true, active: true });
-    const log = await as('postgres', 'select kind, actor, actor_id = $2 as by_student from public.check_ins where enrollment_id = $1 order by id', [enrollment, J.id]);
+    const log = await as(
+      'postgres',
+      'select kind, actor, actor_id = $2 as by_student from public.check_ins where enrollment_id = $1 order by id',
+      [enrollment, J.id],
+    );
     assert.deepEqual(
       log.rows.map((x) => x.kind),
       ['complete', 'progress', 'stuck', 'unstuck', 'progress', 'skip', 'not_yet', 'complete', 'complete'],
@@ -1104,13 +1316,17 @@ describe('students: joining, Today, and check-ins', () => {
   });
 
   test("students can open their program's files, and no one else's", async () => {
-    const see = (who, name) => as(who, "select name from storage.objects where bucket_id = 'program-files' and name = $1", [name]);
+    const see = (who, name) =>
+      as(who, "select name from storage.objects where bucket_id = 'program-files' and name = $1", [name]);
     assert.equal((await see(J, `${C.id}/${prog}/script.pdf`)).rowCount, 1);
     assert.equal((await see(K, `${C.id}/${prog}/script.pdf`)).rowCount, 0);
     assert.equal((await see(B, `${C.id}/${prog}/script.pdf`)).rowCount, 0);
     // Joining doesn't let them write there.
     assert.equal(
-      await as(J, 'insert into storage.objects (bucket_id, name) values ($1, $2)', ['program-files', `${C.id}/${prog}/x.pdf`]).then(
+      await as(J, 'insert into storage.objects (bucket_id, name) values ($1, $2)', [
+        'program-files',
+        `${C.id}/${prog}/x.pdf`,
+      ]).then(
         () => 'inserted',
         () => 'refused',
       ),
@@ -1154,7 +1370,11 @@ describe('creator dashboard', () => {
     for (const u of [E, F, G, ...Object.values(kids)]) {
       await db.query('insert into auth.users (id, email) values ($1, $2)', [u.id, u.email]);
     }
-    for (const [u, name] of [[E, 'Eli'], [F, 'Fay'], [G, 'Gus']]) {
+    for (const [u, name] of [
+      [E, 'Eli'],
+      [F, 'Fay'],
+      [G, 'Gus'],
+    ]) {
       await as(u, 'select public.register_creator($1)', [name], { commit: true });
       await as(u, "update public.creators set agent_name = 'Agent' where id = $1", [u.id], { commit: true });
     }
@@ -1163,7 +1383,14 @@ describe('creator dashboard', () => {
     const build = async (who, goal) => {
       const p = (await as(who, 'select * from public.create_program($1, 4)', [goal], { commit: true })).rows[0];
       const m = async (position, title) =>
-        (await as(who, 'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id', [p.id, position, title], { commit: true })).rows[0].id;
+        (
+          await as(
+            who,
+            'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id',
+            [p.id, position, title],
+            { commit: true },
+          )
+        ).rows[0].id;
       const task = async (milestone, position, fields) => {
         const cols = ['milestone_id', 'position', ...Object.keys(fields)];
         const r = await as(
@@ -1182,8 +1409,20 @@ describe('creator dashboard', () => {
     const m1 = await e.m(0, 'Get set up');
     const m2 = await e.m(1, 'Make offers');
     t.watch = await e.task(m1, 0, { title: 'Watch the welcome lesson', why: 'It shows the path.' });
-    t.calls = await e.task(m1, 1, { title: 'Call 10 sellers', why: 'Talk to sellers.', completion_type: 'count', target_count: 10, unit: 'calls', check_in_question: 'How many calls?' });
-    t.script = await e.task(m2, 0, { title: 'Write your offer script', why: 'Say it the same way.', completion_type: 'text', check_in_question: 'Paste your script.' });
+    t.calls = await e.task(m1, 1, {
+      title: 'Call 10 sellers',
+      why: 'Talk to sellers.',
+      completion_type: 'count',
+      target_count: 10,
+      unit: 'calls',
+      check_in_question: 'How many calls?',
+    });
+    t.script = await e.task(m2, 0, {
+      title: 'Write your offer script',
+      why: 'Say it the same way.',
+      completion_type: 'text',
+      check_in_question: 'Paste your script.',
+    });
     assert.equal((await as(E, 'select public.publish_program($1) as r', [prog], { commit: true })).rows[0].r.ok, true);
 
     const f = await build(F, 'Find your first buyer');
@@ -1200,16 +1439,29 @@ describe('creator dashboard', () => {
     await checkIn(kids.going, t.watch, 'complete');
     await checkIn(kids.going, t.calls, 'progress', { number: 4 });
 
-    await checkIn(kids.stuck, t.watch, 'stuck', { reason: "I don't know how", text: 'The video link is broken for me.' });
+    await checkIn(kids.stuck, t.watch, 'stuck', {
+      reason: "I don't know how",
+      text: 'The video link is broken for me.',
+    });
 
     await checkIn(kids.resolved, t.watch, 'stuck', { reason: 'Something outside my control' });
     await checkIn(kids.resolved, t.watch, 'unstuck');
     await checkIn(kids.resolved, t.watch, 'complete');
 
     await checkIn(kids.quiet, t.watch, 'complete');
-    await as('postgres', "update public.check_ins set created_at = now() - interval '4 days' where enrollment_id = $1", [enr[kids.quiet.email]], { commit: true });
+    await as(
+      'postgres',
+      "update public.check_ins set created_at = now() - interval '4 days' where enrollment_id = $1",
+      [enr[kids.quiet.email]],
+      { commit: true },
+    );
 
-    await as('postgres', "update public.enrollments set started_at = now() - interval '5 days' where id = $1", [enr[kids.never.email]], { commit: true });
+    await as(
+      'postgres',
+      "update public.enrollments set started_at = now() - interval '5 days' where id = $1",
+      [enr[kids.never.email]],
+      { commit: true },
+    );
 
     await checkIn(kids.done, t.watch, 'complete');
     await checkIn(kids.done, t.calls, 'progress', { number: 6 });
@@ -1244,10 +1496,47 @@ describe('creator dashboard', () => {
     );
   });
 
+  test('students name themselves; creators see that name and can never change it', async () => {
+    const kid = kids.done;
+    const id = enr[kid.email];
+    await invalid(as(kid, "update public.students set first_name = '   ' where id = $1", [kid.id]));
+    await invalid(as(kid, 'update public.students set last_name = $2 where id = $1', [kid.id, 'x'.repeat(61)]));
+    await denied(as(kid, "update public.students set email = 'me@example.com' where id = $1", [kid.id]));
+    // Another student and the creator match no row, so nothing changes.
+    assert.equal(
+      (await as(kids.going, "update public.students set first_name = 'X' where id = $1", [kid.id])).rowCount,
+      0,
+    );
+    assert.equal((await as(E, "update public.students set first_name = 'X' where id = $1", [kid.id])).rowCount, 0);
+
+    const set = (first, last) =>
+      as(kid, 'update public.students set first_name = $2, last_name = $3 where id = $1', [kid.id, first, last], {
+        commit: true,
+      });
+    try {
+      assert.equal((await set('Gina', 'Oak')).rowCount, 1);
+      let d = await dashboard(E);
+      assert.equal(row(d, kid).name, 'Gina Oak');
+      assert.equal(row(d, kid).email, 'done@example.com');
+      assert.equal(d.recent.find((r) => r.enrollment_id === id)?.name, 'Gina Oak');
+      const rec = (await as(E, 'select public.creator_student($1) as r', [id])).rows[0].r;
+      assert.equal(rec.name, 'Gina Oak');
+      assert.equal(rec.email, 'done@example.com');
+
+      await set('Gina', null);
+      d = await dashboard(E);
+      assert.equal(row(d, kid).name, 'Gina');
+    } finally {
+      await set(null, null);
+    }
+  });
+
   test('rows show the milestone, tasks done, partial counts, and the open blocker', async () => {
     const d = await dashboard(E);
     const going = row(d, kids.going);
-    assert.equal(going.name, 'going@example.com');
+    // No name given yet: the name is empty, never made up from the email.
+    assert.equal(going.name, null);
+    assert.equal(going.email, 'going@example.com');
     assert.deepEqual(going.progress, { done: 1, total: 3 });
     assert.deepEqual(going.milestone, { number: 1, count: 2, title: 'Get set up' });
     assert.equal(going.task.title, 'Call 10 sellers');
@@ -1272,9 +1561,13 @@ describe('creator dashboard', () => {
   test('a stuck student is flagged as a blocker even after days without a check-in', async () => {
     await db.query('begin');
     try {
-      await db.query("update public.check_ins set created_at = now() - interval '6 days' where enrollment_id = $1", [enr[kids.stuck.email]]);
+      await db.query("update public.check_ins set created_at = now() - interval '6 days' where enrollment_id = $1", [
+        enr[kids.stuck.email],
+      ]);
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: E.id, role: 'authenticated' })]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: E.id, role: 'authenticated' }),
+      ]);
       const d = (await db.query('select public.creator_dashboard() as d')).rows[0].d;
       assert.equal(row(d, kids.stuck).attention, 'blocker');
     } finally {
@@ -1287,7 +1580,9 @@ describe('creator dashboard', () => {
     try {
       await db.query("update public.programs set status = 'paused' where id = $1", [prog]);
       await db.query('set local role authenticated');
-      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: E.id, role: 'authenticated' })]);
+      await db.query("select set_config('request.jwt.claims', $1, true)", [
+        JSON.stringify({ sub: E.id, role: 'authenticated' }),
+      ]);
       const d = (await db.query('select public.creator_dashboard() as d')).rows[0].d;
       assert.equal(row(d, kids.quiet).status, 'progressing');
       assert.equal(row(d, kids.never).status, 'progressing');
@@ -1304,13 +1599,23 @@ describe('creator dashboard', () => {
     assert.deepEqual(
       s.path.map((m) => [m.number, m.title, m.tasks.map((x) => [x.title, x.state, x.count_so_far, x.current])]),
       [
-        [1, 'Get set up', [['Watch the welcome lesson', 'done', 0, false], ['Call 10 sellers', 'in_progress', 4, true]]],
+        [
+          1,
+          'Get set up',
+          [
+            ['Watch the welcome lesson', 'done', 0, false],
+            ['Call 10 sellers', 'in_progress', 4, true],
+          ],
+        ],
         [2, 'Make offers', [['Write your offer script', 'not_started', 0, false]]],
       ],
     );
     assert.deepEqual(
       s.check_ins.map((c) => [c.kind, c.task_title, c.value_number]),
-      [['progress', 'Call 10 sellers', 4], ['complete', 'Watch the welcome lesson', null]],
+      [
+        ['progress', 'Call 10 sellers', 4],
+        ['complete', 'Watch the welcome lesson', null],
+      ],
     );
     assert.ok(s.check_ins.every((c) => c.actor === 'student' && c.created_at));
 
@@ -1368,7 +1673,14 @@ describe('creator dashboard', () => {
     assert.deepEqual(
       going.milestones.map((m) => [m.number, m.title, m.tasks.map((x) => [x.title, x.state, x.count_so_far])]),
       [
-        [1, 'Get set up', [['Watch the welcome lesson', 'done', 0], ['Call 10 sellers', 'current', 4]]],
+        [
+          1,
+          'Get set up',
+          [
+            ['Watch the welcome lesson', 'done', 0],
+            ['Call 10 sellers', 'current', 4],
+          ],
+        ],
         [2, 'Make offers', [['Write your offer script', 'upcoming', 0]]],
       ],
     );
@@ -1386,10 +1698,94 @@ describe('creator dashboard', () => {
     await denied(as(X, 'select public.get_path()'));
   });
 
+  test('activity: check-ins per student, the last 24 hours, and the latest reports', async () => {
+    const d = await dashboard(E);
+    assert.deepEqual(Object.fromEntries(d.students.map((x) => [x.email.split('@')[0], x.check_ins])), {
+      stuck: 1,
+      never: 0,
+      quiet: 1,
+      resolved: 3,
+      going: 2,
+      done: 4,
+    });
+    // The quiet student's check-in is 4 days old, so it isn't in either window.
+    assert.deepEqual(d.activity, { last_24h: 10, previous_24h: 0 });
+    assert.equal(d.recent.length, 6);
+    assert.equal(d.recent[0].name, null);
+    assert.equal(d.recent[0].email, 'done@example.com');
+    assert.equal(d.recent[0].kind, 'complete');
+    assert.equal(d.recent[0].task_title, 'Write your offer script');
+    const times = d.recent.map((r) => Date.parse(r.created_at));
+    assert.deepEqual(
+      times,
+      [...times].sort((a, b) => b - a),
+    );
+    assert.ok(d.recent.every((r) => Object.values(enr).includes(r.enrollment_id)));
+    // Another creator's dashboard has none of it.
+    const f = await dashboard(F);
+    assert.deepEqual(f.recent, []);
+    assert.deepEqual(f.activity, { last_24h: 0, previous_24h: 0 });
+  });
+
+  test("editing a live path never changes or deletes a student's progress or check-ins", async () => {
+    const snap = async () =>
+      (
+        await as(
+          'postgres',
+          `select (select json_agg(tp order by tp.enrollment_id, tp.task_id) from public.task_progress tp
+                    join public.enrollments e on e.id = tp.enrollment_id where e.program_id = $1) as progress,
+                  (select json_agg(ci order by ci.id) from public.check_ins ci
+                    join public.enrollments e on e.id = ci.enrollment_id where e.program_id = $1) as check_ins`,
+          [prog],
+        )
+      ).rows[0];
+    const before = await snap();
+    const m1 = (await as(E, 'select milestone_id from public.tasks where id = $1', [t.watch])).rows[0].milestone_id;
+    await as(
+      E,
+      "update public.tasks set title = 'Watch the new welcome video', why = 'Updated.' where id = $1",
+      [t.watch],
+      { commit: true },
+    );
+    await as(E, 'update public.tasks set target_count = 20 where id = $1', [t.calls], { commit: true });
+    const added = (
+      await as(
+        E,
+        "insert into public.tasks (milestone_id, position, title, why) values ($1, 5, 'A new task', 'New.') returning id",
+        [m1],
+        {
+          commit: true,
+        },
+      )
+    ).rows[0].id;
+    await as(E, 'update public.tasks set archived_at = now() where id = $1', [added], { commit: true });
+    await as(E, 'update public.tasks set archived_at = now() where id = $1', [t.script], { commit: true });
+    // A task or milestone with check-ins can't be deleted outright (the app only archives), and a
+    // live program can't be deleted.
+    await invalid(as(E, 'delete from public.tasks where id = $1', [t.watch]), '23503');
+    await invalid(as(E, 'delete from public.milestones where id = $1', [m1]), '23503');
+    assert.equal((await as(E, 'delete from public.programs where id = $1', [prog])).rowCount, 0);
+    assert.deepEqual(await snap(), before);
+    // Put it back for the tests that follow.
+    await as(
+      E,
+      "update public.tasks set title = 'Watch the welcome lesson', why = 'It shows the path.' where id = $1",
+      [t.watch],
+      { commit: true },
+    );
+    await as(E, 'update public.tasks set target_count = 10 where id = $1', [t.calls], { commit: true });
+    await as(E, 'update public.tasks set archived_at = null where id = $1', [t.script], { commit: true });
+  });
+
   test('reading the dashboard changes nothing', async () => {
     const snap = async () =>
-      (await as('postgres', `select (select count(*) from public.check_ins) as c, (select count(*) from public.task_progress) as p,
-        (select max(last_active_at)::text from public.enrollments) as a`)).rows[0];
+      (
+        await as(
+          'postgres',
+          `select (select count(*) from public.check_ins) as c, (select count(*) from public.task_progress) as p,
+        (select max(last_active_at)::text from public.enrollments) as a`,
+        )
+      ).rows[0];
     const before = await snap();
     await dashboard(E);
     await student(E, enr[kids.going.email]);

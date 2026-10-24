@@ -206,7 +206,7 @@ function TaskEditor({
       <TopBar parent={parent} />
       <View style={styles.content}>
         <Label>{taskId ? 'Edit task' : 'New task'}</Label>
-        <Headline>What should they do?</Headline>
+        <Headline size="compact">What should they do?</Headline>
         {!savedId ? (
           <View style={styles.box}>
             <TextField

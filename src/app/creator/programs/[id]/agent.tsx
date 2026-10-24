@@ -54,7 +54,7 @@ export default function AgentNameScreen() {
       <TopBar parent={parent} />
       <View style={styles.content}>
         <Label>Your agent</Label>
-        <Headline>Name your agent.</Headline>
+        <Headline size="compact">Name your agent.</Headline>
         <Body muted>
           Students see this name on every task, so your brand comes first. It’s the same for all your programs.
         </Body>

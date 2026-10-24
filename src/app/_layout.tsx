@@ -58,6 +58,7 @@ function RootStack() {
       <Stack.Protected guard={area === 'creator'}>
         <Stack.Screen name="creator/(tabs)" />
         <Stack.Screen name="creator/new" />
+        <Stack.Screen name="creator/drafts" />
         <Stack.Screen name="creator/programs/[id]/index" />
         <Stack.Screen name="creator/programs/[id]/generate" />
         <Stack.Screen name="creator/programs/[id]/milestones/index" />
@@ -67,9 +68,13 @@ function RootStack() {
         <Stack.Screen name="creator/programs/[id]/preview" />
         <Stack.Screen name="creator/programs/[id]/share" />
         <Stack.Screen name="creator/students/[id]" />
+        <Stack.Screen name="creator/profile" />
       </Stack.Protected>
       <Stack.Protected guard={area === 'needs-name'}>
         <Stack.Screen name="creator/name" />
+      </Stack.Protected>
+      <Stack.Protected guard={area === 'student-name'}>
+        <Stack.Screen name="student-name" />
       </Stack.Protected>
       <Stack.Protected guard={area === 'student'}>
         <Stack.Screen name="student" />

@@ -43,7 +43,7 @@ export default function NewProgramScreen() {
         <TopBar parent="/creator/programs" />
         <View style={styles.content}>
           <Label>New program · 1 of 2</Label>
-          <Headline>What will your students achieve?</Headline>
+          <Headline size="compact">What will your students achieve?</Headline>
           <Body muted>One sentence. Students see it on their plan.</Body>
           <TextField
             label="Goal"
@@ -69,7 +69,7 @@ export default function NewProgramScreen() {
       }>
       <View style={styles.content}>
         <Label>New program · 2 of 2</Label>
-        <Headline>How many weeks does it usually take?</Headline>
+        <Headline size="compact">How many weeks does it usually take?</Headline>
         <Body muted>A number from 1 to 52. Students see it as their target date.</Body>
         <TextField
           label="Weeks"

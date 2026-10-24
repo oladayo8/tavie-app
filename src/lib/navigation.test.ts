@@ -38,6 +38,7 @@ describe('areaFor', () => {
     expect(areaFor(true, 'creator')).toBe('creator');
     expect(areaFor(true, 'student')).toBe('student');
     expect(areaFor(true, 'needs-name')).toBe('needs-name');
+    expect(areaFor(true, 'student-needs-name')).toBe('student-name');
     expect(areaFor(true, 'none')).toBe('no-access');
     expect(areaFor(true, null)).toBe('no-access');
   });
@@ -73,6 +74,7 @@ describe('route guards', () => {
       if (r === 'creator/name') expect(areaOf(r)).toBe('needs-name');
       else if (r.startsWith('creator/')) expect(areaOf(r)).toBe('creator');
       if (r.startsWith('student/')) expect(areaOf(r)).toBe('student');
+      if (r === 'student-name') expect(areaOf(r)).toBe('student-name');
     }
     expect(guarded.public).toEqual(['j/[slug]']);
   });

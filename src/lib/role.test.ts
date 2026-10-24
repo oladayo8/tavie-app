@@ -4,8 +4,9 @@ import { resolveAccess } from '@/lib/role';
 
 const none = { isCreator: false, isStudent: false };
 const creator = { isCreator: true, isStudent: false };
-const student = { isCreator: false, isStudent: true };
-const both = { isCreator: true, isStudent: true };
+const student = { isCreator: false, isStudent: true, studentHasName: true };
+const unnamed = { isCreator: false, isStudent: true, studentHasName: false };
+const both = { isCreator: true, isStudent: true, studentHasName: true };
 
 describe('resolveAccess', () => {
   it('never makes someone a creator just because they signed in', () => {
@@ -22,8 +23,11 @@ describe('resolveAccess', () => {
     expect(resolveAccess(creator, null)).toEqual({ access: 'creator', registerStudent: false });
   });
 
-  it('registers a student who arrived by link, once', () => {
-    expect(resolveAccess(none, { role: 'student', slug: 'marcus-reed' })).toEqual({ access: 'student', registerStudent: true });
+  it('registers a student who arrived by link, once, then asks their name', () => {
+    expect(resolveAccess(none, { role: 'student', slug: 'marcus-reed' })).toEqual({
+      access: 'student-needs-name',
+      registerStudent: true,
+    });
     expect(resolveAccess(student, { role: 'student', slug: 'marcus-reed' })).toEqual({
       access: 'student',
       registerStudent: false,
@@ -38,5 +42,10 @@ describe('resolveAccess', () => {
 
   it('opens the student side for a returning student with no link', () => {
     expect(resolveAccess(student, null)).toEqual({ access: 'student', registerStudent: false });
+  });
+
+  it('asks an existing student without a first name for it before anything else', () => {
+    expect(resolveAccess(unnamed, null)).toEqual({ access: 'student-needs-name', registerStudent: false });
+    expect(resolveAccess(unnamed, { role: 'student', slug: 'marcus-reed' }).access).toBe('student-needs-name');
   });
 });

@@ -16,7 +16,8 @@ export type CheckInKind = 'complete' | 'progress' | 'not_yet' | 'stuck' | 'unstu
 
 export type StudentRow = {
   enrollment_id: string;
-  name: string;
+  /** The name the student gave, or null until they add it. Never made up from the email. */
+  name: string | null;
   email: string;
   status: StudentStatus;
   attention: Attention;
@@ -35,6 +36,8 @@ export type StudentRow = {
     count_so_far: number;
   } | null;
   blocker: { reason: string; note: string | null; reported_at: string } | null;
+  /** Every report they've made in this program. */
+  check_ins?: number;
   last_check_in: {
     kind: CheckInKind;
     value_number: number | null;
@@ -50,6 +53,22 @@ export type Dashboard = {
   inactive_days?: number;
   counts: { enrolled: number; progressing: number; needs_attention: number; completed: number } | null;
   students: StudentRow[];
+  /** Check-ins in rolling 24-hour windows. */
+  activity?: { last_24h: number; previous_24h: number };
+  /** The six latest check-ins in the program, newest first. */
+  recent?: RecentCheckIn[];
+};
+
+export type RecentCheckIn = {
+  id: number;
+  enrollment_id: string;
+  name: string | null;
+  email: string;
+  kind: CheckInKind;
+  value_number: number | null;
+  unit: string | null;
+  task_title: string;
+  created_at: string;
 };
 
 export type PathTask = {
@@ -188,5 +207,47 @@ export function resolvedLine(kind: CheckInKind | null): string | null {
       return 'They skipped the task';
     default:
       return null;
+  }
+}
+
+/** How a student is shown: the name they gave, or their email as it is until they add one. */
+export function studentLabel(s: { name: string | null; email: string }): string {
+  return s.name?.trim() || s.email;
+}
+
+/** Up to two letters for an avatar: "Jasmine King" → "JK", "Priya" → "PR". Empty without a name. */
+export function initials(name: string | null | undefined): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : parts[0].slice(0, 2);
+  return letters.toUpperCase();
+}
+
+/** "+18% vs previous 24 h", "Same as previous 24 h", or null when there's nothing to compare. */
+export function trend(now: number, before: number): string | null {
+  if (!before) return null;
+  const change = Math.round(((now - before) / before) * 100);
+  if (change === 0) return 'Same as previous 24 h';
+  return `${change > 0 ? '+' : ''}${change}% vs previous 24 h`;
+}
+
+/** One feed line: "jo logged 5 calls", "jo finished Watch the welcome lesson". */
+export function feedLine(
+  c: Pick<RecentCheckIn, 'name' | 'email' | 'kind' | 'value_number' | 'unit' | 'task_title'>,
+): string {
+  const who = studentLabel(c);
+  switch (c.kind) {
+    case 'progress':
+      return `${who} logged ${c.value_number ?? 0} ${c.unit?.trim() || ''}`.trim();
+    case 'complete':
+      return `${who} finished ${c.task_title}`;
+    case 'not_yet':
+      return `${who} said not yet on ${c.task_title}`;
+    case 'stuck':
+      return `${who} is stuck on ${c.task_title}`;
+    case 'unstuck':
+      return `${who} got unstuck on ${c.task_title}`;
+    case 'skip':
+      return `${who} skipped ${c.task_title}`;
   }
 }

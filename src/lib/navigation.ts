@@ -5,7 +5,7 @@ import type { Access } from '@/lib/role';
  * so a student can never reach the creator tabs (or the reverse) by typing a URL, and the
  * database still checks every read and write on its own.
  */
-export type Area = 'signed-out' | 'creator' | 'needs-name' | 'student' | 'no-access';
+export type Area = 'signed-out' | 'creator' | 'needs-name' | 'student' | 'student-name' | 'no-access';
 
 export function areaFor(signedIn: boolean, access: Access | null): Area {
   if (!signedIn) return 'signed-out';
@@ -16,6 +16,8 @@ export function areaFor(signedIn: boolean, access: Access | null): Area {
       return 'needs-name';
     case 'student':
       return 'student';
+    case 'student-needs-name':
+      return 'student-name';
     default:
       return 'no-access';
   }
