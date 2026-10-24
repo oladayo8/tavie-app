@@ -1,34 +1,27 @@
 import { router } from 'expo-router';
 import { useCallback } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Row } from '@/components/rows';
 import { Screen } from '@/components/screen';
 import { ErrorState, Loading } from '@/components/states';
-import { Body, Headline, Label } from '@/components/text';
-import { Wordmark } from '@/components/wordmark';
-import { Spacing } from '@/constants/theme';
-import { signOut } from '@/lib/auth';
+import { Body, Headline } from '@/components/text';
+import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { listPrograms } from '@/lib/builder';
 import { useLoad } from '@/lib/use-load';
 
-/** Creator home: every program, newest first. */
+/** Programs tab: every program, newest first, and New program. Opens the existing builder. */
 export default function ProgramsScreen() {
   const load = useCallback(() => listPrograms(), []);
   const { data, loading, error, retry } = useLoad(load);
 
   return (
-    <Screen
-      footer={
-        <>
-          <Button title="New program" onPress={() => router.push('/creator/new')} />
-          <Button variant="link" title="Sign out" onPress={signOut} />
-        </>
-      }>
-      <Wordmark size={28} />
+    <Screen tab>
+      <Text accessibilityRole="header" maxFontSizeMultiplier={1.3} style={styles.title}>
+        Programs
+      </Text>
       <View style={styles.content}>
-        <Label>Your programs</Label>
         {error && !data ? (
           <ErrorState message={error} onRetry={retry} />
         ) : loading && !data ? (
@@ -49,16 +42,27 @@ export default function ProgramsScreen() {
             <Body muted>It takes about 45 minutes. You can stop any time; everything saves as you go.</Body>
           </View>
         )}
+        <Button
+          variant={data?.length ? 'secondary' : 'primary'}
+          title="New program"
+          onPress={() => router.push('/creator/new')}
+        />
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  title: {
+    fontFamily: Fonts.display,
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: -0.5,
+    color: Colors.ink,
+    paddingBottom: 12,
+  },
   content: {
-    flex: 1,
     gap: Spacing.three,
-    paddingTop: Spacing.five,
   },
   empty: {
     gap: Spacing.three,

@@ -7,7 +7,8 @@
 - **M2 PR2** creator builder (#3, merged 2026-10-23): programs, milestones, tasks (4 report types and a follow-up), resources (links and PDFs), agent name, preview, publish, share link with Copy.
 
 - **AI plan generator** (#4, merged 2026-10-23): goal and existing course to a suggested plan the creator edits and approves; one-sentence task suggestions; advanced task fields behind "Edit details".
-- **Student Today** (open): join link enrolls the student; Today shows the current task with check-ins, partial counts, stuck, and skip for optional tasks.
+- **Student Today** (#6): join link enrolls the student; Today shows the current task with check-ins, partial counts, stuck, and skip for optional tasks.
+- **Creator dashboard** (open): counts, Needs attention (blockers, then 3+ days inactive), student list, and a read-only student record with every check-in.
 
 ## Key decisions
 - Progression is deterministic. AI only suggests builder content; it never publishes or decides completion, and nothing is saved until the creator approves.
@@ -21,5 +22,5 @@
 - Production Supabase still needs the PR1 migration before the pilot.
 
 ## Next
-- Daniel tests the student flow on his iPhone (join link → Today → check-ins) and approves its PR.
-- Not built yet: student onboarding questions and pacing, the Path tab, milestone review gates, creator overrides, and the creator dashboard.
+- Daniel tests the creator dashboard on his iPhone and approves its PR.
+- Not built yet: student onboarding questions and pacing (On track / Behind), the Path tab, milestone review gates, nudges, and creator overrides (resolve, waive, replace).

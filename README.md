@@ -53,7 +53,8 @@ Supabase's built-in email sender is rate limited (a few emails per hour). Add cu
 | `/j/[slug]` | Creator share link (student arrival). Try `exp://<your-ip>:8081/--/j/marcus-wholesaling` in Expo Go |
 | `/sign-in`, `/verify` | Email one-time code |
 | `/creator/name` | "What's your name?" The explicit step that makes someone a creator |
-| `/creator` | Your programs (Draft or Live) |
+| `/creator` | Creator tabs: **Overview** (counts and Needs attention for a published program), **Students** (`/creator/students`, everyone, needs-attention first), **Programs** (`/creator/programs`, every program and New program). Builder screens open above the tabs |
+| `/creator/students/[id]` | One student's record: current task, path, and every check-in as reported, with blockers resolved or open |
 | `/creator/new` | New program: goal, then length |
 | `/creator/programs/[id]` | Program overview: goal, length, path, what publishing still needs, Publish |
 | `/creator/programs/[id]/milestones` and `/milestones/[mid]` | Add, rename, reorder, and remove milestones and their tasks |
@@ -61,8 +62,11 @@ Supabase's built-in email sender is rate limited (a few emails per hour). Add cu
 | `/creator/programs/[id]/tasks/[tid]` | Task editor (`new` for a new task): one-sentence Suggest, action, why, report type, resources; follow-up, minutes and skipping under "Edit details" |
 | `/creator/programs/[id]/agent`, `/preview`, `/share` | Agent name, student preview (saves nothing), join link with Copy |
 | `/j/[slug]` | A coach's join link: program title, coach, and "<coach> can see your progress and check-ins" |
+| `/student/path`, `/student/profile` | Student tabs next to Today: **My Path** (every milestone and task, read only, from `get_path()`) and **Profile** (account, program, coach, Sign out) |
 | `/student` | Today: joins the program from the link, then shows the one current task with its check-in (done, number, yes/no, short answer), I'm stuck, and skip for optional tasks |
 | `/no-access` | Signed in with no role and no link: "Ask your coach for your Tavie link" |
+
+Each role has its own bottom tabs (`src/lib/navigation.ts`). Every route file must be listed in `src/app/_layout.tsx` inside its role's `Stack.Protected` guard; `src/lib/navigation.test.ts` fails if one isn't.
 
 There is no role picker. How someone arrives picks a side, but only the database grants access: a person is a
 creator if they have a `creators` row (made only by `register_creator`, from "I'm a creator" then their name),
@@ -81,6 +85,22 @@ Students never read program tables. `join_program(slug)` enrolls a signed-in stu
 updates `task_progress` in one locked transaction. The next task is always the first unfinished task in the
 creator's order; a task finishes only when its report meets the creator's condition. Students can open PDFs only
 for live programs they joined.
+
+## Creator dashboard
+
+Two read-only functions, `creator_dashboard(program_id)` and `creator_student(enrollment_id)`, return only
+students enrolled in the caller's own programs. Nothing is stored: each status is worked out from
+`enrollments`, `task_progress` and `check_ins` every time, first match wins:
+
+1. **Completed**: every active task is done or skipped.
+2. **Needs attention, blocker**: the student marked their current task "I'm stuck" and hasn't cleared it.
+3. **Needs attention, inactive**: no check-in for 3 days (`private.inactive_after()`), counted from joining if
+   they never checked in. Never while the program is paused.
+4. **Progressing**: everyone else.
+
+A blocker counts as resolved by the next report on that task that clears it in `submit_check_in`: "I figured it
+out", logging progress, finishing, or skipping. Every answer is shown as reported by the student; Tavie doesn't
+verify it.
 
 ## AI plan generator
 

@@ -31,7 +31,7 @@ export default function ProgramOverviewScreen() {
   if (!data) {
     return (
       <Screen>
-        <TopBar parent="/creator" label="Programs" />
+        <TopBar parent="/creator/programs" label="Programs" />
         {error ? <ErrorState message={error} onRetry={retry} /> : <Loading />}
       </Screen>
     );
@@ -100,7 +100,7 @@ export default function ProgramOverviewScreen() {
           <Button variant="secondary" title="Preview" onPress={() => go('/creator/programs/[id]/preview')} />
         </>
       }>
-      <TopBar parent="/creator" label="Programs" />
+      <TopBar parent="/creator/programs" label="Programs" />
       <View style={styles.content}>
         <Label style={isLive ? styles.live : undefined}>{isLive ? 'Live' : 'Draft'}</Label>
         <Headline>{program.goal}</Headline>

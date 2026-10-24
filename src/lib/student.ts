@@ -132,3 +132,34 @@ export async function getJoinInfo(slug: string): Promise<JoinInfo | null> {
     title: row.title,
   };
 }
+
+export type PathTaskState = 'done' | 'skipped' | 'current' | 'upcoming';
+
+export type StudentPath = {
+  program: { title: string; goal: string; status: 'live' | 'paused' | 'draft' };
+  creator: { first_name: string; last_name: string };
+  joined_at: string;
+  finished: boolean;
+  milestones: {
+    number: number;
+    title: string;
+    tasks: {
+      title: string;
+      completion_type: CompletionType;
+      target_count: number | null;
+      unit: string | null;
+      is_optional: boolean;
+      state: PathTaskState;
+      stuck: boolean;
+      count_so_far: number;
+      done_at: string | null;
+    }[];
+  }[];
+};
+
+/** Read only: the whole path in the creator's order. Null when they haven't joined a program. */
+export async function getPath(): Promise<StudentPath | null> {
+  const { data, error } = await db().rpc('get_path');
+  if (error) throw error;
+  return (data as StudentPath | null) ?? null;
+}

@@ -40,7 +40,7 @@ export default function NewProgramScreen() {
   if (step === 'goal') {
     return (
       <Screen footer={<Button title="Next" onPress={() => setStep('weeks')} disabled={!goalIsValid(goal)} />}>
-        <TopBar parent="/creator" />
+        <TopBar parent="/creator/programs" />
         <View style={styles.content}>
           <Label>New program · 1 of 2</Label>
           <Headline>What will your students achieve?</Headline>

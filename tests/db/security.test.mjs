@@ -1118,3 +1118,282 @@ describe('students: joining, Today, and check-ins', () => {
     );
   });
 });
+
+describe('creator dashboard', () => {
+  const E = { id: randomUUID(), email: 'eli@example.com' }; // creator with students
+  const F = { id: randomUUID(), email: 'fay@example.com' }; // creator with a live program and no students
+  const G = { id: randomUUID(), email: 'gus@example.com' }; // creator with only a draft
+  const kids = {
+    going: { id: randomUUID(), email: 'going@example.com' }, // done one task, partial count on the next
+    stuck: { id: randomUUID(), email: 'stuck@example.com' }, // blocker open
+    resolved: { id: randomUUID(), email: 'resolved@example.com' }, // blocker resolved, then kept going
+    quiet: { id: randomUUID(), email: 'quiet@example.com' }, // last check-in 4 days ago
+    never: { id: randomUUID(), email: 'never@example.com' }, // joined 5 days ago, never checked in
+    done: { id: randomUUID(), email: 'done@example.com' }, // finished the path
+  };
+  const t = {};
+  const enr = {};
+  let prog;
+  let progF;
+
+  const dashboard = async (who, program = null) =>
+    (await as(who, 'select public.creator_dashboard($1) as d', [program])).rows[0].d;
+  const student = async (who, enrollment) =>
+    (await as(who, 'select public.creator_student($1) as d', [enrollment])).rows[0].d;
+  const checkIn = (who, task, kind, extra = {}) =>
+    as(
+      who,
+      `select public.submit_check_in(enrollment_id => $1, task_id => $2, kind => $3, value_number => $4,
+         value_yes_no => $5, value_text => $6, reason => $7) as r`,
+      [enr[who.email], task, kind, extra.number ?? null, extra.yes ?? null, extra.text ?? null, extra.reason ?? null],
+      { commit: true },
+    );
+  const row = (d, who) => d.students.find((s) => s.email === who.email);
+
+  before(async () => {
+    for (const u of [E, F, G, ...Object.values(kids)]) {
+      await db.query('insert into auth.users (id, email) values ($1, $2)', [u.id, u.email]);
+    }
+    for (const [u, name] of [[E, 'Eli'], [F, 'Fay'], [G, 'Gus']]) {
+      await as(u, 'select public.register_creator($1)', [name], { commit: true });
+      await as(u, "update public.creators set agent_name = 'Agent' where id = $1", [u.id], { commit: true });
+    }
+    for (const k of Object.values(kids)) await as(k, 'select public.register_student()', [], { commit: true });
+
+    const build = async (who, goal) => {
+      const p = (await as(who, 'select * from public.create_program($1, 4)', [goal], { commit: true })).rows[0];
+      const m = async (position, title) =>
+        (await as(who, 'insert into public.milestones (program_id, position, title) values ($1, $2, $3) returning id', [p.id, position, title], { commit: true })).rows[0].id;
+      const task = async (milestone, position, fields) => {
+        const cols = ['milestone_id', 'position', ...Object.keys(fields)];
+        const r = await as(
+          who,
+          `insert into public.tasks (${cols.join(', ')}) values (${cols.map((_, i) => `$${i + 1}`).join(', ')}) returning id`,
+          [milestone, position, ...Object.values(fields)],
+          { commit: true },
+        );
+        return r.rows[0].id;
+      };
+      return { p, m, task };
+    };
+
+    const e = await build(E, 'Close your first deal');
+    prog = e.p.id;
+    const m1 = await e.m(0, 'Get set up');
+    const m2 = await e.m(1, 'Make offers');
+    t.watch = await e.task(m1, 0, { title: 'Watch the welcome lesson', why: 'It shows the path.' });
+    t.calls = await e.task(m1, 1, { title: 'Call 10 sellers', why: 'Talk to sellers.', completion_type: 'count', target_count: 10, unit: 'calls', check_in_question: 'How many calls?' });
+    t.script = await e.task(m2, 0, { title: 'Write your offer script', why: 'Say it the same way.', completion_type: 'text', check_in_question: 'Paste your script.' });
+    assert.equal((await as(E, 'select public.publish_program($1) as r', [prog], { commit: true })).rows[0].r.ok, true);
+
+    const f = await build(F, 'Find your first buyer');
+    progF = f.p.id;
+    await f.task(await f.m(0, 'Start'), 0, { title: 'Say hello', why: 'Start.' });
+    assert.equal((await as(F, 'select public.publish_program($1) as r', [progF], { commit: true })).rows[0].r.ok, true);
+    await build(G, 'A draft only');
+
+    for (const k of Object.values(kids)) {
+      const card = (await as(k, 'select public.join_program($1) as c', [e.p.slug], { commit: true })).rows[0].c;
+      enr[k.email] = card.enrollment_id;
+    }
+
+    await checkIn(kids.going, t.watch, 'complete');
+    await checkIn(kids.going, t.calls, 'progress', { number: 4 });
+
+    await checkIn(kids.stuck, t.watch, 'stuck', { reason: "I don't know how", text: 'The video link is broken for me.' });
+
+    await checkIn(kids.resolved, t.watch, 'stuck', { reason: 'Something outside my control' });
+    await checkIn(kids.resolved, t.watch, 'unstuck');
+    await checkIn(kids.resolved, t.watch, 'complete');
+
+    await checkIn(kids.quiet, t.watch, 'complete');
+    await as('postgres', "update public.check_ins set created_at = now() - interval '4 days' where enrollment_id = $1", [enr[kids.quiet.email]], { commit: true });
+
+    await as('postgres', "update public.enrollments set started_at = now() - interval '5 days' where id = $1", [enr[kids.never.email]], { commit: true });
+
+    await checkIn(kids.done, t.watch, 'complete');
+    await checkIn(kids.done, t.calls, 'progress', { number: 6 });
+    await checkIn(kids.done, t.calls, 'progress', { number: 5 });
+    await checkIn(kids.done, t.script, 'complete', { text: 'Hi, I buy houses for cash.' });
+  });
+
+  test('a creator with no published program, or no students yet, gets an empty dashboard', async () => {
+    assert.deepEqual(await dashboard(G), { programs: [], program_id: null, counts: null, students: [] });
+    const d = await dashboard(F);
+    assert.equal(d.program_id, progF);
+    assert.deepEqual(d.counts, { enrolled: 0, progressing: 0, needs_attention: 0, completed: 0 });
+    assert.deepEqual(d.students, []);
+  });
+
+  test('statuses come from the real records, and the ones who need help come first', async () => {
+    const d = await dashboard(E);
+    assert.equal(d.program_id, prog);
+    assert.equal(d.inactive_days, 3);
+    assert.deepEqual(d.programs, [{ id: prog, title: 'Close your first deal', status: 'live', enrolled: 6 }]);
+    assert.deepEqual(d.counts, { enrolled: 6, progressing: 2, needs_attention: 3, completed: 1 });
+    assert.deepEqual(
+      d.students.map((s) => [s.email, s.status, s.attention]),
+      [
+        ['stuck@example.com', 'needs_attention', 'blocker'],
+        ['never@example.com', 'needs_attention', 'inactive'],
+        ['quiet@example.com', 'needs_attention', 'inactive'],
+        ['resolved@example.com', 'progressing', null],
+        ['going@example.com', 'progressing', null],
+        ['done@example.com', 'completed', null],
+      ],
+    );
+  });
+
+  test('rows show the milestone, tasks done, partial counts, and the open blocker', async () => {
+    const d = await dashboard(E);
+    const going = row(d, kids.going);
+    assert.equal(going.name, 'going@example.com');
+    assert.deepEqual(going.progress, { done: 1, total: 3 });
+    assert.deepEqual(going.milestone, { number: 1, count: 2, title: 'Get set up' });
+    assert.equal(going.task.title, 'Call 10 sellers');
+    assert.equal(going.task.count_so_far, 4);
+    assert.equal(going.task.target_count, 10);
+    assert.equal(going.last_check_in.kind, 'progress');
+    assert.equal(going.last_check_in.value_number, 4);
+    assert.equal(going.blocker, null);
+
+    const stuck = row(d, kids.stuck);
+    assert.equal(stuck.task.state, 'stuck');
+    assert.equal(stuck.blocker.reason, "I don't know how");
+    assert.equal(stuck.blocker.note, 'The video link is broken for me.');
+
+    const done = row(d, kids.done);
+    assert.deepEqual(done.progress, { done: 3, total: 3 });
+    assert.equal(done.task, null);
+    assert.equal(done.milestone, null);
+    assert.ok(done.finished_at);
+  });
+
+  test('a stuck student is flagged as a blocker even after days without a check-in', async () => {
+    await db.query('begin');
+    try {
+      await db.query("update public.check_ins set created_at = now() - interval '6 days' where enrollment_id = $1", [enr[kids.stuck.email]]);
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: E.id, role: 'authenticated' })]);
+      const d = (await db.query('select public.creator_dashboard() as d')).rows[0].d;
+      assert.equal(row(d, kids.stuck).attention, 'blocker');
+    } finally {
+      await db.query('rollback');
+    }
+  });
+
+  test('a paused program never marks anyone inactive', async () => {
+    await db.query('begin');
+    try {
+      await db.query("update public.programs set status = 'paused' where id = $1", [prog]);
+      await db.query('set local role authenticated');
+      await db.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: E.id, role: 'authenticated' })]);
+      const d = (await db.query('select public.creator_dashboard() as d')).rows[0].d;
+      assert.equal(row(d, kids.quiet).status, 'progressing');
+      assert.equal(row(d, kids.never).status, 'progressing');
+      assert.equal(row(d, kids.stuck).attention, 'blocker');
+    } finally {
+      await db.query('rollback');
+    }
+  });
+
+  test('student detail shows the path, partial counts, and every check-in as reported', async () => {
+    const s = await student(E, enr[kids.going.email]);
+    assert.equal(s.program.title, 'Close your first deal');
+    assert.ok(s.joined_at && s.consented_at);
+    assert.deepEqual(
+      s.path.map((m) => [m.number, m.title, m.tasks.map((x) => [x.title, x.state, x.count_so_far, x.current])]),
+      [
+        [1, 'Get set up', [['Watch the welcome lesson', 'done', 0, false], ['Call 10 sellers', 'in_progress', 4, true]]],
+        [2, 'Make offers', [['Write your offer script', 'not_started', 0, false]]],
+      ],
+    );
+    assert.deepEqual(
+      s.check_ins.map((c) => [c.kind, c.task_title, c.value_number]),
+      [['progress', 'Call 10 sellers', 4], ['complete', 'Watch the welcome lesson', null]],
+    );
+    assert.ok(s.check_ins.every((c) => c.actor === 'student' && c.created_at));
+
+    const done = await student(E, enr[kids.done.email]);
+    assert.equal(done.check_ins[0].value_text, 'Hi, I buy houses for cash.');
+    assert.equal(done.status, 'completed');
+  });
+
+  test('detail shows whether a blocker was resolved, with the reason and note', async () => {
+    const open = (await student(E, enr[kids.stuck.email])).check_ins.find((c) => c.kind === 'stuck');
+    assert.equal(open.reason, "I don't know how");
+    assert.equal(open.value_text, 'The video link is broken for me.');
+    assert.equal(open.resolved_by, null);
+    assert.equal(open.resolved_at, null);
+
+    const r = await student(E, enr[kids.resolved.email]);
+    const closed = r.check_ins.find((c) => c.kind === 'stuck');
+    assert.equal(closed.reason, 'Something outside my control');
+    assert.equal(closed.resolved_by, 'unstuck');
+    assert.ok(closed.resolved_at);
+    assert.equal(r.blocker, null);
+  });
+
+  test("creators see only their own programs' students", async () => {
+    const d = await dashboard(F);
+    assert.ok(!JSON.stringify(d).includes('@example.com'));
+    await denied(dashboard(F, prog));
+    await denied(dashboard(E, progF));
+    await denied(dashboard(E, randomUUID()));
+    await denied(student(F, enr[kids.going.email]));
+    await denied(student(A, enr[kids.going.email]));
+    await denied(student(E, randomUUID()));
+  });
+
+  test('students, no-role users and logged-out callers get nothing', async () => {
+    await denied(dashboard(kids.going));
+    await denied(dashboard(kids.going, prog));
+    await denied(student(kids.going, enr[kids.going.email]));
+    await denied(student(kids.stuck, enr[kids.going.email]));
+    await denied(dashboard(N));
+    await denied(student(N, enr[kids.going.email]));
+    await denied(dashboard(X));
+    await assert.rejects(as('anon', 'select public.creator_dashboard()'));
+    await assert.rejects(as('anon', 'select public.creator_student($1)', [enr[kids.going.email]]));
+    await denied(as(E, 'select private.student_row($1)', [enr[kids.going.email]]));
+    await denied(as(E, 'select * from public.check_ins'));
+  });
+
+  test("My Path shows the student's own milestones, done, current, and upcoming tasks", async () => {
+    const path = async (who) => (await as(who, 'select public.get_path() as p')).rows[0].p;
+    const going = await path(kids.going);
+    assert.equal(going.program.title, 'Close your first deal');
+    assert.equal(going.creator.first_name, 'Eli');
+    assert.equal(going.finished, false);
+    assert.deepEqual(
+      going.milestones.map((m) => [m.number, m.title, m.tasks.map((x) => [x.title, x.state, x.count_so_far])]),
+      [
+        [1, 'Get set up', [['Watch the welcome lesson', 'done', 0], ['Call 10 sellers', 'current', 4]]],
+        [2, 'Make offers', [['Write your offer script', 'upcoming', 0]]],
+      ],
+    );
+    // No task ids: nothing on this tab can act on a task.
+    assert.ok(going.milestones.every((m) => m.tasks.every((x) => !('id' in x))));
+    const stuck = await path(kids.stuck);
+    assert.deepEqual([stuck.milestones[0].tasks[0].state, stuck.milestones[0].tasks[0].stuck], ['current', true]);
+    const done = await path(kids.done);
+    assert.equal(done.finished, true);
+    assert.ok(done.milestones.every((m) => m.tasks.every((x) => x.state === 'done')));
+    // Creators, students who haven't joined, and logged-out callers get nothing.
+    assert.equal(await path(E), null);
+    assert.equal(await path(S), null);
+    await assert.rejects(as('anon', 'select public.get_path()'));
+    await denied(as(X, 'select public.get_path()'));
+  });
+
+  test('reading the dashboard changes nothing', async () => {
+    const snap = async () =>
+      (await as('postgres', `select (select count(*) from public.check_ins) as c, (select count(*) from public.task_progress) as p,
+        (select max(last_active_at)::text from public.enrollments) as a`)).rows[0];
+    const before = await snap();
+    await dashboard(E);
+    await student(E, enr[kids.going.email]);
+    await as(kids.going, 'select public.get_path()');
+    assert.deepEqual(await snap(), before);
+  });
+});

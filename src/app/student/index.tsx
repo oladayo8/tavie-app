@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
 import { Choices } from '@/components/rows';
@@ -11,7 +11,6 @@ import { TodayCard } from '@/components/today-card';
 import { Wordmark } from '@/components/wordmark';
 import { Colors, Fonts, Spacing } from '@/constants/theme';
 import { getArrival } from '@/lib/arrival';
-import { signOut } from '@/lib/auth';
 import { confirm } from '@/lib/confirm';
 import { dataErrorMessage } from '@/lib/errors';
 import {
@@ -67,7 +66,7 @@ export default function StudentHome() {
 
   if (card === undefined) {
     return (
-      <Screen>
+      <Screen tab>
         <TodayHeader />
         {error ? <ErrorState message={error} onRetry={load} /> : <Loading label="Loading your task" />}
       </Screen>
@@ -76,7 +75,7 @@ export default function StudentHome() {
 
   if (card === null) {
     return (
-      <Screen>
+      <Screen tab>
         <TodayHeader />
         <View style={styles.stateCard}>
           <Headline style={styles.stateTitle}>You’re signed in.</Headline>
@@ -91,7 +90,7 @@ export default function StudentHome() {
 
   if (card.program.status !== 'live') {
     return (
-      <Screen>
+      <Screen tab>
         <TodayHeader card={card} />
         <View style={styles.stateCard}>
           <Headline style={styles.stateTitle}>{coach} has paused this program.</Headline>
@@ -104,7 +103,7 @@ export default function StudentHome() {
 
   if (!card.task) {
     return (
-      <Screen>
+      <Screen tab>
         <TodayHeader card={card} />
         <View style={styles.stateCard}>
           <Headline style={styles.stateTitle}>You finished {coach}’s path.</Headline>
@@ -116,7 +115,7 @@ export default function StudentHome() {
   }
 
   return (
-    <Screen>
+    <Screen tab>
       <TodayHeader card={card} />
       <View style={styles.content}>
         {message ? (
@@ -139,7 +138,7 @@ export default function StudentHome() {
   );
 }
 
-/** Compact top: Tavie, sign out, then the program, its coach, and where they are on the path. */
+/** Compact top: Tavie, then the program, its coach, and where they are on the path. */
 function TodayHeader({ card }: { card?: Card }) {
   const coachName = card ? [card.creator.first_name, card.creator.last_name].filter(Boolean).join(' ') : '';
   const milestone = card?.milestone;
@@ -147,15 +146,6 @@ function TodayHeader({ card }: { card?: Card }) {
     <View style={styles.header}>
       <View style={styles.bar}>
         <Wordmark size={24} />
-        <Pressable
-          accessibilityRole="button"
-          onPress={signOut}
-          hitSlop={8}
-          style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
-          <Text maxFontSizeMultiplier={1.3} style={styles.signOutText}>
-            Sign out
-          </Text>
-        </Pressable>
       </View>
       {card ? (
         <View style={styles.program}>
@@ -510,21 +500,9 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   bar: {
+    minHeight: 36,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  signOut: {
-    minHeight: 36,
-    justifyContent: 'center',
-  },
-  signOutText: {
-    fontFamily: Fonts.bodyMedium,
-    fontSize: 14,
-    color: Colors.inkMuted,
-  },
-  pressed: {
-    opacity: 0.6,
   },
   program: {
     gap: 4,
